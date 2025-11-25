@@ -9,7 +9,7 @@ COPY axonops-yum-repo.repo /etc/yum.repos.d/axonops-yum.repo
 RUN groupadd --gid 9988 axonops && \
     useradd --gid 9988 --uid 9988 --shell /bin/bash -c "AxonOps" -G cassandra axonops && \
     usermod -aG axonops cassandra && \
-    microdnf -y install axon-cassandra4.1-agent-${AGENT_VER} axon-agent && \
+    microdnf -y install axon-cassandra5.0-agent-jdk17-${AGENT_VER} axon-agent gettext && \
     chown -R cassandra:cassandra /etc/axonops /var/lib/axonops /var/log/axonops && \
     chmod 755 /usr/share/axonops/axon-agent && \
     rm -f /etc/axonops/axon-agent.yml && \
