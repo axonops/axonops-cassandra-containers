@@ -48,6 +48,8 @@ jobs:
   build-and-push:
     needs: create-release
     runs-on: ubuntu-latest
+    matrix:
+      cassandra_version: [5.0.5]
     permissions:
       contents: read
       packages: write
@@ -79,8 +81,7 @@ jobs:
         with:
           images: ghcr.io/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}},prefix=5.0-
-            type=raw,value=5.0-latest
+            type=semver,pattern={{version}},prefix=${{ matrix.cassandra_version }}-
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5

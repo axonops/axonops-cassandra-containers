@@ -10,6 +10,7 @@ RUN groupadd --gid 9988 axonops && \
     usermod -aG axonops cassandra && \
     microdnf -y install axon-cassandra5.0-agent-jdk17-${AGENT_VER} axon-agent gettext && \
     chown -R cassandra:cassandra /etc/axonops /var/lib/axonops /var/log/axonops && \
+    chmod 755 /usr/share/axonops/axon-agent && \
     touch /var/run/utmp && \
     echo ". /usr/share/axonops/axonops-jvm.options" >> /opt/cassandra/conf/cassandra-env.sh
 

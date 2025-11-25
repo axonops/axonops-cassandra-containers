@@ -19,30 +19,6 @@ These containers are optimized for Kubernetes deployments using the K8ssandra Op
 - Docker (for local builds)
 - AxonOps account with valid API key and organization ID
 
-## Project Structure
-
-```
-.
-├── 4.1/                          # Cassandra 4.1 specific files
-│   ├── Dockerfile.4-1            # Dockerfile for Cassandra 4.1
-│   └── rebuild-41.sh             # Build script for 4.1
-├── 5.0/                          # Cassandra 5.0 specific files
-│   ├── Dockerfile                # Dockerfile for Cassandra 5.0
-│   ├── axonops-entrypoint.sh     # Entrypoint script
-│   ├── axonops-entrypoint-supervisor.sh  # Alternative supervisor-based entrypoint
-│   ├── axonops-yum-repo.repo     # AxonOps YUM repository configuration
-│   └── supervisor.conf           # Supervisor configuration
-├── scripts/                      # Helper scripts
-│   ├── install_k8ssandra.sh      # K8ssandra operator installation
-│   └── rebuild.sh                # Build and deploy script
-├── examples/                     # Example configurations
-│   └── axon-cluster.yml          # Sample K8ssandra cluster definition
-├── .github/workflows/            # CI/CD pipelines
-│   └── build-and-publish-5.0.yml # Automated build and publish workflow
-├── cluster-axonops.yaml          # Production cluster configuration (5.0)
-└── cluster-axonops41.yaml        # Production cluster configuration (4.1)
-```
-
 ## Supported Cassandra Versions
 
 ### Cassandra 5.0
@@ -266,6 +242,21 @@ storageConfig:
     resources:
       requests:
         storage: 2Gi
+```
+
+AxonOps requires a small volume to hold its configuration. You can add it with
+
+```yaml
+        extraVolumes:
+          pvcs:
+            - name: axonops-data
+              mountPath: /var/lib/axonops
+              pvcSpec:
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 512Mi
 ```
 
 **AxonOps Integration:**
