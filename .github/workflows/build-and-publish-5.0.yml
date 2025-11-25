@@ -90,7 +90,7 @@ jobs:
           images: ghcr.io/${{ env.IMAGE_NAME }}
           tags: |
             # Tags based on the git version, prefixed by the matrix variable
-            type=semver,pattern={{version}},prefix=${{ matrix.cassandra_version }}-
+            type=ref,event=tag,prefix=${{ matrix.cassandra_version }}-
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
