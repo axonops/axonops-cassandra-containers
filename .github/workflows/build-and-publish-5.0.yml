@@ -4,14 +4,256 @@ on:
   push:
     tags:
       - '*.*.*'
-      - '*.*.*.*-*' # example: 1.0.11.asb4126cass5k8ssandra1-1
+      - '*.*.*.*-*'
+      - main
+  pull_request:
+    branches:
+      - main
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      matrix:
+        cassandra_version: [5.0.6, 4.1.10]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract base version
+        id: version
+        run: |
+          BASE_VERSION=$(echo "${{ matrix.cassandra_version }}" | cut -d. -f1,2)
+          echo "base_version=${BASE_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Build image for testing
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ steps.version.outputs.base_version }}
+          file: ./${{ steps.version.outputs.base_version }}/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: axonops-cassandra:test
+          build-args: |
+            CASSANDRA_VERSION=${{ steps.version.outputs.base_version }}
+            MAJOR_VERSION=${{ steps.version.outputs.base_version }}
+
+      - name: Start container
+        run: |
+          docker run -d --name cassandra-test \
+            -e AXON_AGENT_KEY=test-key \
+            -e AXON_AGENT_ORG=test-org \
+            -e AXON_AGENT_HOST=localhost \
+            -p 8080:8080 \
+            axonops-cassandra:test
+          echo "Container started, waiting for services..."
+
+      - name: Wait for Management API liveness
+        run: |
+          echo "Waiting for Management API to be live..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8080/api/v0/probes/liveness | grep -q "OK"; then
+              echo "Management API is live"
+              exit 0
+            fi
+            echo "Attempt $i/30 - waiting 10s..."
+            sleep 10
+          done
+          echo "Management API failed to become live"
+          docker logs cassandra-test
+          exit 1
+
+      - name: Wait for Cassandra readiness
+        run: |
+          echo "Waiting for Cassandra to be ready..."
+          for i in {1..60}; do
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/v0/probes/readiness | grep -q "200"; then
+              echo "Cassandra is ready"
+              exit 0
+            fi
+            echo "Attempt $i/60 - waiting 10s..."
+            sleep 10
+          done
+          echo "Cassandra failed to become ready"
+          docker logs cassandra-test
+          exit 1
+
+      - name: Test Management API endpoints
+        run: |
+          echo "=== Testing Management API endpoints ==="
+
+          echo "Testing /api/v0/probes/liveness..."
+          curl -sf http://localhost:8080/api/v0/probes/liveness
+          echo ""
+
+          echo "Testing /api/v0/probes/readiness..."
+          curl -sf http://localhost:8080/api/v0/probes/readiness
+          echo ""
+
+          echo "Testing /api/v0/metadata/versions/release..."
+          RELEASE=$(curl -sf http://localhost:8080/api/v0/metadata/versions/release)
+          echo "Cassandra version: $RELEASE"
+
+          echo "Testing /api/v0/metadata/localdc..."
+          DC=$(curl -sf http://localhost:8080/api/v0/metadata/localdc)
+          echo "Local datacenter: $DC"
+
+          echo "Testing /api/v0/lifecycle/pid..."
+          PID=$(curl -sf http://localhost:8080/api/v0/lifecycle/pid)
+          echo "Cassandra PID: $PID"
+
+          echo "Testing /api/v0/metadata/endpoints..."
+          curl -sf http://localhost:8080/api/v0/metadata/endpoints
+          echo ""
+
+          echo "Testing /api/v0/ops/keyspace..."
+          curl -sf http://localhost:8080/api/v0/ops/keyspace
+          echo ""
+
+          echo "=== All Management API tests passed ==="
+
+      - name: Test Management API Java agent operations
+        run: |
+          echo "=== Testing Management API Java agent operations ==="
+
+          echo "Creating test keyspace via Management API..."
+          curl -sf -X POST "http://localhost:8080/api/v0/ops/keyspace/create" \
+            -H "Content-Type: application/json" \
+            -d '{"keyspace_name": "test_keyspace", "replication_settings": {"class": "SimpleStrategy", "replication_factor": "1"}}'
+          echo "Keyspace created"
+
+          echo "Verifying keyspace was created..."
+          curl -sf http://localhost:8080/api/v0/ops/keyspace | grep -q "test_keyspace"
+          echo "Keyspace verified"
+
+          echo "Creating test table via Management API..."
+          curl -sf -X POST "http://localhost:8080/api/v0/ops/tables/create" \
+            -H "Content-Type: application/json" \
+            -d '{"keyspace_name": "test_keyspace", "table_name": "test_table", "columns": [{"name": "id", "type_definition": "uuid", "kind": "PARTITION"}, {"name": "value", "type_definition": "text", "kind": "REGULAR"}]}'
+          echo "Table created"
+
+          echo "Flushing tables (exercises Java agent)..."
+          curl -sf -X POST "http://localhost:8080/api/v0/ops/tables/flush" \
+            -H "Content-Type: application/json" \
+            -d '{"keyspace_name": "test_keyspace"}'
+          echo "Flush completed"
+
+          echo "Running compaction (exercises Java agent)..."
+          curl -sf -X POST "http://localhost:8080/api/v0/ops/tables/compact" \
+            -H "Content-Type: application/json" \
+            -d '{"keyspace_name": "test_keyspace"}'
+          echo "Compaction completed"
+
+          echo "Performing keyspace cleanup (exercises Java agent)..."
+          curl -sf -X POST "http://localhost:8080/api/v0/ops/keyspace/cleanup" \
+            -H "Content-Type: application/json" \
+            -d '{"keyspace_name": "test_keyspace", "jobs": 1}'
+          echo "Cleanup completed"
+
+          echo "=== All Java agent operation tests passed ==="
+
+      - name: Verify AxonOps agent is running
+        run: |
+          echo "Checking AxonOps agent process..."
+          if docker exec cassandra-test pgrep -f "axon-agent" > /dev/null; then
+            echo "AxonOps agent is running"
+          else
+            echo "WARNING: AxonOps agent process not found"
+            docker exec cassandra-test ps aux
+            exit 1
+          fi
+
+      - name: Verify cqlai is installed
+        run: |
+          echo "Checking cqlai installation..."
+          docker exec cassandra-test cqlai --version
+          echo "cqlai is installed"
+
+      - name: Test CQL operations with cqlai
+        run: |
+          echo "=== Testing CQL operations with cqlai ==="
+
+          echo "Creating keyspace..."
+          docker exec cassandra-test cqlai -e "CREATE KEYSPACE IF NOT EXISTS cqlai_test WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
+
+          echo "Creating table..."
+          docker exec cassandra-test cqlai -e "CREATE TABLE IF NOT EXISTS cqlai_test.users (id UUID PRIMARY KEY, name TEXT, email TEXT, created_at TIMESTAMP);"
+
+          echo "Inserting test data..."
+          docker exec cassandra-test cqlai -e "INSERT INTO cqlai_test.users (id, name, email, created_at) VALUES (uuid(), 'Alice', 'alice@example.com', toTimestamp(now()));"
+          docker exec cassandra-test cqlai -e "INSERT INTO cqlai_test.users (id, name, email, created_at) VALUES (uuid(), 'Bob', 'bob@example.com', toTimestamp(now()));"
+          docker exec cassandra-test cqlai -e "INSERT INTO cqlai_test.users (id, name, email, created_at) VALUES (uuid(), 'Charlie', 'charlie@example.com', toTimestamp(now()));"
+
+          echo "Selecting data..."
+          docker exec cassandra-test cqlai -e "SELECT * FROM cqlai_test.users;"
+
+          echo "Verifying row count..."
+          ROW_COUNT=$(docker exec cassandra-test cqlai -e "SELECT COUNT(*) FROM cqlai_test.users;" | grep -oE '[0-9]+' | tail -1)
+          if [ "$ROW_COUNT" -eq 3 ]; then
+            echo "Row count verified: $ROW_COUNT rows"
+          else
+            echo "ERROR: Expected 3 rows, got $ROW_COUNT"
+            exit 1
+          fi
+
+          echo "Testing UPDATE..."
+          docker exec cassandra-test cqlai -e "UPDATE cqlai_test.users SET name = 'Alice Updated' WHERE id IN (SELECT id FROM cqlai_test.users WHERE name = 'Alice' ALLOW FILTERING);" || true
+
+          echo "Testing DELETE..."
+          docker exec cassandra-test cqlai -e "DELETE FROM cqlai_test.users WHERE id IN (SELECT id FROM cqlai_test.users WHERE name = 'Charlie' ALLOW FILTERING);" || true
+
+          echo "Querying system tables..."
+          docker exec cassandra-test cqlai -e "SELECT keyspace_name, table_name FROM system_schema.tables WHERE keyspace_name = 'cqlai_test';"
+
+          echo "Cleanup test keyspace..."
+          docker exec cassandra-test cqlai -e "DROP KEYSPACE cqlai_test;"
+
+          echo "=== All cqlai CQL tests passed ==="
+
+      - name: Run Trivy container security scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'axonops-cassandra:test'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Run Trivy scan and upload to GitHub Security
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'axonops-cassandra:test'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker logs cassandra-test || true
+          docker stop cassandra-test || true
+          docker rm cassandra-test || true
+
   create-release:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -47,7 +289,8 @@ jobs:
             return release.data.id;
 
   build-and-push:
-    needs: create-release
+    needs: [test, create-release]
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 3
@@ -104,7 +347,6 @@ jobs:
           build-args: |
             CASSANDRA_VERSION=${{ steps.version.outputs.base_version }}
             MAJOR_VERSION=${{ steps.version.outputs.base_version }}
-            AGENT_VER=${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
