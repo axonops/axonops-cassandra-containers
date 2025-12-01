@@ -146,7 +146,7 @@ jobs:
           echo "Creating test keyspace via Management API..."
           curl -sf -X POST "http://localhost:8080/api/v0/ops/keyspace/create" \
             -H "Content-Type: application/json" \
-            -d '{"keyspace_name": "test_keyspace", "replication_settings": {"class": "SimpleStrategy", "replication_factor": "1"}}'
+            -d '{"keyspace_name": "test_keyspace", "replication_settings": [{"dc_name": "datacenter1", "replication_factor": 1}]}'
           echo "Keyspace created"
 
           echo "Verifying keyspace was created..."
@@ -156,7 +156,7 @@ jobs:
           echo "Creating test table via Management API..."
           curl -sf -X POST "http://localhost:8080/api/v0/ops/tables/create" \
             -H "Content-Type: application/json" \
-            -d '{"keyspace_name": "test_keyspace", "table_name": "test_table", "columns": [{"name": "id", "type_definition": "uuid", "kind": "PARTITION"}, {"name": "value", "type_definition": "text", "kind": "REGULAR"}]}'
+            -d '{"keyspace_name": "test_keyspace", "table_name": "test_table", "columns": [{"name": "id", "type": "uuid", "kind": "PARTITION_KEY"}, {"name": "value", "type": "text", "kind": "REGULAR"}]}'
           echo "Table created"
 
           echo "Flushing tables (exercises Java agent)..."
