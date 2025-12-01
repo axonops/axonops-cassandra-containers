@@ -23,7 +23,7 @@ jobs:
       security-events: write
     strategy:
       matrix:
-        cassandra_version: [5.0.6, 4.1.10]
+        cassandra_version: [5.0.6]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -309,7 +309,7 @@ jobs:
     strategy:
       max-parallel: 3
       matrix:
-        cassandra_version: [5.0.4,5.0.5,5.0.6,4.1.9,4.1.10]
+        cassandra_version: [5.0.4, 5.0.5, 5.0.6]
     permissions:
       contents: read
       packages: write
