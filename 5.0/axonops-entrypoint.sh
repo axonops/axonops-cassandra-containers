@@ -1,5 +1,4 @@
 #!/bin/bash -x
-set -e
 
 touch /var/log/axonops/axon-agent.log
 
@@ -21,9 +20,9 @@ END
     fi
 fi
 
-/usr/share/axonops/axon-agent $AXON_AGENT_ARGS | tee /var/log/axonops/axon-agent.log 2>&1 &
-/docker-entrypoint.sh mgmtapi &
+# Start axon-agent in background
+/usr/share/axonops/axon-agent $AXON_AGENT_ARGS 2>&1 | tee /var/log/axonops/axon-agent.log &
 
-wait -n
-# Exit with status of process that exited first
-exit $?
+# Start Management API + Cassandra in foreground
+# This keeps the container running as long as the management API is up
+exec /docker-entrypoint.sh mgmtapi
