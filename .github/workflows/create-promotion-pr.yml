@@ -109,7 +109,7 @@ EOF
             --body "$PR_BODY" \
             --label "merge-to-main"
 
-          echo "✓ PR created for release ${VERSION}"
+          echo "✓ PR created for tag ${TAG_NAME}"
 
       - name: PR already exists
         if: steps.check_pr.outputs.pr_exists == 'true'
