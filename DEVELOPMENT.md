@@ -181,15 +181,14 @@ git branch -d feature/my-feature
 ### Pull Requests
 
 **To Development:**
-- Create from feature/fix branches
-- CI runs tests automatically
-- Requires approval (per branch protection rules)
-- Merge when approved and tests pass
+- **Not required** - Direct commits allowed
+- Feature branches optional (for complex features)
+- CI tests run automatically on all pushes
 
 **To Main:**
-- Create from `development` branch only
-- CI runs tests again
-- Requires approval
+- **Required** - Must create PR from `development` branch
+- Requires approval (enforced by branch protection)
+- CI tests run on PR
 - Only merge when development is stable and tested
 
 ## Code Review Checklist
