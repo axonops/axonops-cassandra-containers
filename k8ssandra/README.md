@@ -137,6 +137,8 @@ The script will:
 
 ## Building Docker Images
 
+**Note:** Commands in this section assume you are in the `k8ssandra/` directory.
+
 If you prefer to build images yourself instead of using the [pre-built images](#pre-built-docker-images):
 
 ```bash
@@ -146,6 +148,8 @@ docker push your-registry/axonops-cassandra:5.0.6
 ```
 
 ## Deploying to Kubernetes
+
+**Note:** Commands in this section assume you are in the `k8ssandra/` directory.
 
 ### Using the Example Configuration
 
@@ -368,6 +372,8 @@ AxonOps requires a persistent volume to store its configuration. Add this to you
 The example shows proper environment variable injection for the AxonOps agent using the container-level environment variables approach required by K8ssandra.
 
 ### Customizing the Example
+
+**Note:** Commands in this section assume you are in the `k8ssandra/` directory.
 
 To use this example:
 
