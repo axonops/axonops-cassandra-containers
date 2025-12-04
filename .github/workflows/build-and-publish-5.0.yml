@@ -40,8 +40,8 @@ jobs:
       - name: Build image for testing
         uses: docker/build-push-action@v5
         with:
-          context: ./${{ steps.version.outputs.base_version }}
-          file: ./${{ steps.version.outputs.base_version }}/Dockerfile
+          context: ./k8ssandra/${{ steps.version.outputs.base_version }}
+          file: ./k8ssandra/${{ steps.version.outputs.base_version }}/Dockerfile
           platforms: linux/amd64
           load: true
           tags: axonops-cassandra:test
@@ -381,8 +381,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./${{ steps.version.outputs.base_version }}
-          file: ./${{ steps.version.outputs.base_version }}/Dockerfile
+          context: ./k8ssandra/${{ steps.version.outputs.base_version }}
+          file: ./k8ssandra/${{ steps.version.outputs.base_version }}/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
