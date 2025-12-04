@@ -35,15 +35,15 @@ axonops-cassandra-containers/
 - Run containers as non-root users with explicit UIDs/GIDs
 - Scan all images with Trivy before publishing
 - Address CRITICAL and HIGH severity vulnerabilities
-- Keep `.trivyignore` minimal and documented
-  - Each ignored CVE must have a comment explaining why
-  - Include link to upstream issue if applicable
+- Keep component `.trivyignore` minimal and documented
+  - Each component has its own `.trivyignore` file: `<component>/.trivyignore`
+  - Each ignored CVE must have an inline comment explaining why
   - Example:
     ```
-    # CVE-2024-1234 - False positive, affects unused test dependency
-    # Upstream issue: https://github.com/project/issues/123
-    CVE-2024-1234
+    # Java - K8ssandra Management API (upstream)
+    CVE-2025-12183  # lz4-java 1.8.0 → 1.8.1 (HIGH - DoS risk, fixed in upstream)
     ```
+  - Workflow must reference component-specific ignore file: `trivyignores: '<component>/.trivyignore'`
 
 ### Versioning
 - Use explicit version directories (e.g., `5.0/`, `4.1/`)

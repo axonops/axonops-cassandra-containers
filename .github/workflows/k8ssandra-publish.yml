@@ -325,7 +325,7 @@ jobs:
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
-          trivyignores: '.trivyignore'
+          trivyignores: 'k8ssandra/.trivyignore'
 
       - name: Run Trivy scan and upload to GitHub Security
         uses: aquasecurity/trivy-action@master
@@ -335,7 +335,7 @@ jobs:
           output: 'trivy-results.sarif'
           ignore-unfixed: true
           vuln-type: 'os,library'
-          trivyignores: '.trivyignore'
+          trivyignores: 'k8ssandra/.trivyignore'
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
