@@ -36,6 +36,14 @@ axonops-cassandra-containers/
 - Scan all images with Trivy before publishing
 - Address CRITICAL and HIGH severity vulnerabilities
 - Keep `.trivyignore` minimal and documented
+  - Each ignored CVE must have a comment explaining why
+  - Include link to upstream issue if applicable
+  - Example:
+    ```
+    # CVE-2024-1234 - False positive, affects unused test dependency
+    # Upstream issue: https://github.com/project/issues/123
+    CVE-2024-1234
+    ```
 
 ### Versioning
 - Use explicit version directories (e.g., `5.0/`, `4.1/`)
