@@ -76,9 +76,10 @@ Every workflow must include:
 4. **Add component README**: Document build/deploy process
 5. **Create GitHub Actions workflow**: Copy existing workflow, update paths
 6. **Add examples**: Include deployment examples in `<component-name>/examples/`
-7. **Update root README**: Add component to Components section
-8. **Update acknowledgements**: Add upstream project acknowledgements
-9. **Update legal notices**: Add relevant trademarks to Legal Notices section
+7. **Add scripts**: Component-specific utilities in `<component-name>/scripts/`
+8. **Update root README**: Add component to Components section
+9. **Update acknowledgements**: Add upstream project acknowledgements
+10. **Update legal notices**: Add relevant trademarks to Legal Notices section
 
 ## Documentation Standards
 
