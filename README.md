@@ -28,6 +28,34 @@ Each component has its own documentation with detailed instructions:
 
 See [DEVELOPMENT.md](./DEVELOPMENT.md) for guidelines on contributing, adding new components, and maintenance procedures.
 
+## Releasing
+
+Components use a two-stage release process for safety and control:
+
+1. **Continuous Testing** - Automatic tests on every push/PR
+2. **Manual Publishing** - Controlled release to GHCR when ready
+
+### Quick Release Guide
+
+```bash
+# 1. Create and push git tag
+git tag 1.0.0
+git push origin 1.0.0
+
+# 2. Trigger publish workflow (GitHub CLI)
+gh workflow run <component>-publish.yml \
+  -f git_tag=1.0.0 \
+  -f container_version=1.0.0
+
+# 3. Monitor workflow
+gh run watch
+```
+
+**GitHub UI:** Actions → Select publish workflow → Run workflow → Enter inputs
+
+Each component has detailed release documentation:
+- [K8ssandra Release Process](./k8ssandra/RELEASE.md)
+
 ## Acknowledgements
 
 ### Apache Cassandra

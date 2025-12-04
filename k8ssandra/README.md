@@ -397,12 +397,18 @@ To use this example:
 
 The repository includes a GitHub Actions workflow that automatically builds and publishes Docker images.
 
-**Workflow:** `.github/workflows/k8ssandra-build-and-publish-5.0.yml`
+**Workflows:**
+- Test: `.github/workflows/k8ssandra-build-and-test.yml`
+- Publish: `.github/workflows/k8ssandra-publish.yml` (manual)
 
-**Triggers:**
-- Push to `main` branch - runs tests only
-- Pull requests to `main` - runs tests only
-- Push version tags (e.g., `1.0.0`) - runs tests, creates release, and publishes images
+**Test Workflow Triggers:**
+- Push to `main` branch (with `k8ssandra/**` changes)
+- Pull requests to `main` (with `k8ssandra/**` changes)
+
+**Publish Workflow:**
+- Manual trigger via GitHub Actions UI or `gh` CLI
+- Requires git tag and container version
+- See [RELEASE.md](./RELEASE.md) for detailed instructions
 
 **Test Suite:**
 The CI pipeline includes comprehensive testing:
@@ -413,9 +419,15 @@ The CI pipeline includes comprehensive testing:
 - Trivy container security scanning
 
 **Publishing Process:**
-1. Tests must pass for all Cassandra versions (5.0.4, 5.0.5, 5.0.6)
-2. GitHub Release is created automatically
-3. Multi-arch images (amd64, arm64) are built and pushed to GHCR
+1. Developer creates git tag (e.g., `git tag 1.0.0 && git push origin 1.0.0`)
+2. Developer triggers publish workflow via GitHub UI or `gh workflow run`
+3. Workflow validates version doesn't exist in GHCR
+4. Full test suite runs on tagged code
+5. Multi-arch images (amd64, arm64) built for all versions (5.0.4, 5.0.5, 5.0.6)
+6. Images pushed to GHCR
+7. GitHub Release created automatically
+
+For complete release instructions, see [RELEASE.md](./RELEASE.md)
 
 **Image Tags:**
 ```

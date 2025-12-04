@@ -147,11 +147,82 @@ Every workflow must include:
 
 ## Release Process
 
-1. **Version Tag**: Create semantic version tag (e.g., `1.0.0`)
-2. **CI/CD**: GitHub Actions automatically builds and tests
-3. **Publishing**: Multi-arch images pushed to GHCR on successful tests
-4. **GitHub Release**: Created automatically with release notes
-5. **Documentation**: Update README with new image tags
+### Overview
+
+Each component uses a two-stage release process:
+
+1. **Continuous Testing** - Automatic testing on push/PR (no publishing)
+2. **Manual Publishing** - Controlled release to GHCR via manual workflow
+
+### Component Workflows
+
+Each component should have two workflows:
+
+**1. `<component>-build-and-test.yml`**
+- Triggers: Push to `main`, PRs (with path filters for `<component>/**`)
+- Runs: Full test suite
+- Does NOT publish to GHCR
+
+**2. `<component>-publish.yml`**
+- Trigger: Manual (`workflow_dispatch`)
+- Inputs: `git_tag`, `container_version`
+- Validates: Container version doesn't exist in GHCR
+- Runs: Full test suite on tagged code
+- Publishes: Multi-arch images to GHCR
+- Creates: GitHub Release named `<component>-<container_version>`
+
+### Release Steps
+
+1. **Develop & Test**
+   ```bash
+   git push origin feature/my-feature
+   # PR created → tests run automatically
+   # Merge when tests pass
+   ```
+
+2. **Create Git Tag**
+   ```bash
+   git tag 1.0.0
+   git push origin 1.0.0
+   ```
+
+3. **Trigger Publish Workflow**
+
+   **GitHub UI:**
+   - Actions → Select publish workflow → Run workflow
+   - Enter `git_tag` and `container_version`
+
+   **GitHub CLI:**
+   ```bash
+   gh workflow run <component>-publish.yml \
+     -f git_tag=1.0.0 \
+     -f container_version=1.0.0
+   ```
+
+4. **Workflow Execution**
+   - Validates version doesn't exist
+   - Checks out specific git tag
+   - Runs all tests
+   - Builds multi-arch images
+   - Publishes to GHCR
+   - Creates GitHub Release
+
+5. **Verify Release**
+   ```bash
+   gh release view <component>-1.0.0
+   docker pull ghcr.io/axonops/<image>:<version>-1.0.0
+   ```
+
+### Component Release Documentation
+
+Each component must have a `RELEASE.md` file documenting:
+- Detailed release workflow
+- Input parameters
+- Troubleshooting steps
+- Version validation
+- Examples with gh CLI and GitHub UI
+
+See `k8ssandra/RELEASE.md` for reference implementation.
 
 ## Legal Compliance
 
