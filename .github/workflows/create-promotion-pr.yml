@@ -1,0 +1,82 @@
+name: Create Promotion PR to Main
+
+on:
+  push:
+    tags:
+      - 'merge-*'
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag is on development branch
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          echo "Tag: $TAG_NAME"
+
+          # Get commit of the tag
+          TAG_COMMIT=$(git rev-parse $TAG_NAME)
+          echo "Tag commit: $TAG_COMMIT"
+
+          # Check if on development branch
+          git fetch origin development
+          if git merge-base --is-ancestor $TAG_COMMIT origin/development; then
+            echo "✓ Tag is on development branch"
+          else
+            echo "ERROR: Tag must be on development branch"
+            exit 1
+          fi
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          # Remove 'merge-' prefix
+          VERSION="${TAG_NAME#merge-}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Promotion version: ${VERSION}"
+
+      - name: Create PR to main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Create PR from development to main
+          gh pr create \
+            --base main \
+            --head development \
+            --title "Release ${VERSION} to production" \
+            --body "## Production Release ${VERSION}
+
+This PR promotes tested changes from development to main for production release.
+
+### Changes in this release
+$(git log --oneline origin/main..origin/development --pretty=format:"- %s")
+
+### Next Steps
+1. Review changes
+2. Approve PR
+3. Merge to main
+4. Tag main branch: \`git tag ${VERSION} && git push origin ${VERSION}\`
+5. Run production publish workflow with tag \`${VERSION}\`
+
+### Workflows
+After merge to main, trigger production publish:
+\`\`\`bash
+gh workflow run k8ssandra-publish.yml \\
+  -f main_git_tag=${VERSION} \\
+  -f container_version=${VERSION}
+\`\`\`
+" \
+            --label "production-release"
+
+          echo "✓ PR created for release ${VERSION}"
