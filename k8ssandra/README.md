@@ -87,6 +87,8 @@ See [Deploying to Kubernetes](#deploying-to-kubernetes) for detailed instruction
 
 ## Getting Started
 
+**Note:** The following commands assume you are in the `k8ssandra/` directory unless otherwise specified.
+
 ### 1. Install K8ssandra Operator
 
 Run the installation script to set up the K8ssandra Operator and required dependencies:
