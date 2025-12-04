@@ -70,16 +70,28 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           TAG_NAME="${GITHUB_REF#refs/tags/}"
 
+          # Get tag creator info
+          TAG_AUTHOR=$(git tag -l --format='%(taggername)' ${TAG_NAME})
+          TAG_EMAIL=$(git tag -l --format='%(taggeremail)' ${TAG_NAME})
+
           # Generate changelog
           git log --oneline origin/main..origin/development --pretty=format:"- %s" > /tmp/changelog.txt
 
           # Create PR body file
-          cat > /tmp/pr-body.md <<'EOFBODY'
+          cat > /tmp/pr-body.md <<EOFBODY
 ## Production Release
+
 This PR promotes tested changes from development to main for production release.
+
+**Requested by:** ${TAG_AUTHOR} ${TAG_EMAIL}
+**Tag:** ${TAG_NAME}
+EOFBODY
+          cat >> /tmp/pr-body.md <<'EOFBODY'
 
 ### Changes in this release
 EOFBODY
+          echo "" >> /tmp/pr-body.md
+          echo "### Changes in this release" >> /tmp/pr-body.md
           cat /tmp/changelog.txt >> /tmp/pr-body.md
           cat >> /tmp/pr-body.md <<'EOFBODY'
 
