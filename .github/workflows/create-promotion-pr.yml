@@ -81,6 +81,13 @@ jobs:
             TAG_EMAIL=$(git log -1 --format='%ae' ${TAG_COMMIT})
           fi
 
+          # Extract GitHub username from email (e.g., 163300+millerjp@users.noreply.github.com → millerjp)
+          if [[ "${TAG_EMAIL}" =~ \+([^@]+)@users\.noreply\.github\.com ]]; then
+            GITHUB_USER="${BASH_REMATCH[1]}"
+          else
+            GITHUB_USER="${TAG_AUTHOR}"
+          fi
+
           git log --oneline origin/main..origin/development --pretty=format:"- %s" > /tmp/changelog.txt
 
           echo "## Merge to Main" > /tmp/pr-body.md
@@ -88,7 +95,7 @@ jobs:
           echo "This PR merges tested changes from development branch to main." >> /tmp/pr-body.md
           echo "" >> /tmp/pr-body.md
           if [ ! -z "${TAG_AUTHOR}" ]; then
-            echo "**Requested by:** ${TAG_AUTHOR} ${TAG_EMAIL}" >> /tmp/pr-body.md
+            echo "**Requested by:** ${TAG_AUTHOR} (@${GITHUB_USER})" >> /tmp/pr-body.md
           fi
           echo "**Tag:** ${TAG_NAME}" >> /tmp/pr-body.md
           echo "" >> /tmp/pr-body.md
@@ -105,7 +112,7 @@ jobs:
           gh pr create \
             --base main \
             --head development \
-            --title "Merge ${TAG_NAME} from development branch to main" \
+            --title "@${GITHUB_USER}: Merge ${TAG_NAME} from development branch to main" \
             --body-file /tmp/pr-body.md
 
           echo "✓ PR created for tag ${TAG_NAME}"
