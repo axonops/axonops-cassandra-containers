@@ -123,7 +123,10 @@ export IMAGE_NAME="your-registry/your-image:tag"
 Use the rebuild script to build, push, and deploy your cluster:
 
 ```bash
+# Change to the version directory (contains Dockerfile)
 cd 5.0
+
+# Run the rebuild script (builds from current directory)
 ../scripts/rebuild.sh
 ```
 
@@ -296,6 +299,7 @@ export AXON_AGENT_KEY="your-key"
 export AXON_AGENT_ORG="your-org"
 export AXON_AGENT_HOST="your-host"  # Optional
 
+# Change to version directory (script runs docker build from here)
 cd 5.0
 ../scripts/rebuild.sh
 ```
