@@ -180,8 +180,11 @@ Each component should have two workflows:
    # Merge when tests pass
    ```
 
-2. **Create Git Tag**
+2. **Create Git Tag on Main Branch**
    ```bash
+   # IMPORTANT: Must be on main branch
+   git checkout main
+   git pull origin main
    git tag 1.0.0
    git push origin 1.0.0
    ```
@@ -200,7 +203,8 @@ Each component should have two workflows:
    ```
 
 4. **Workflow Execution**
-   - Validates version doesn't exist
+   - Validates tag is on main branch (fails if not)
+   - Validates version doesn't exist in GHCR
    - Checks out specific git tag
    - Runs all tests
    - Builds multi-arch images

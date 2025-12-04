@@ -33,11 +33,17 @@ The `k8ssandra-build-and-test.yml` workflow runs on:
 - Push to `main` branch (when `k8ssandra/**` changes)
 - Pull requests to `main` (when `k8ssandra/**` changes)
 
-### 2. Create Git Tag
+### 2. Create Git Tag on Main Branch
+
+**IMPORTANT:** Tags must be created on the `main` branch only. The publish workflow validates this.
 
 When ready to release, create a git tag:
 
 ```bash
+# Ensure you're on main branch and up to date
+git checkout main
+git pull origin main
+
 # Tag the release commit
 git tag 1.0.0
 
@@ -46,6 +52,8 @@ git push origin 1.0.0
 ```
 
 **Tag naming:** Tags can be anything (e.g., `1.0.0`, `v1.0.0`, `k8ssandra-1.0.0`, `release-2024-12`). The tag is just a reference point for the workflow.
+
+**Validation:** The publish workflow will verify the tag points to a commit on `main` branch. If you tag a commit from a feature branch, the workflow will fail.
 
 ### 3. Trigger Publish Workflow
 
@@ -210,6 +218,21 @@ All images are multi-arch: `linux/amd64`, `linux/arm64`
 - Ensure you pushed the tag: `git push origin <tag>`
 - Check tag exists: `git tag -l`
 - Tag must exist in remote repository
+
+### Tag Not on Main Branch
+
+**Error:** `Tag X.Y.Z is not on main branch`
+
+**Solution:**
+- Tags must point to commits on `main` branch
+- Merge your feature branch to main first
+- Then create the tag on main:
+  ```bash
+  git checkout main
+  git pull origin main
+  git tag 1.0.0
+  git push origin 1.0.0
+  ```
 
 ### Image Push Fails
 

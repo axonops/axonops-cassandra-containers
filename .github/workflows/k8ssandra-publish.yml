@@ -21,7 +21,31 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: read
+      contents: read
     steps:
+      - name: Checkout code at tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_tag }}
+
+      - name: Verify tag is on main branch
+        run: |
+          echo "Checking if tag ${{ inputs.git_tag }} is on main branch..."
+
+          # Get the commit hash of the tag
+          TAG_COMMIT=$(git rev-parse ${{ inputs.git_tag }})
+          echo "Tag commit: $TAG_COMMIT"
+
+          # Check if this commit exists in main branch history
+          git fetch origin main
+          if git merge-base --is-ancestor $TAG_COMMIT origin/main; then
+            echo "✓ Tag ${{ inputs.git_tag }} is on main branch"
+          else
+            echo "ERROR: Tag ${{ inputs.git_tag }} is not on main branch"
+            echo "Only tags pointing to commits on main branch can be released"
+            exit 1
+          fi
+
       - name: Check if container version already exists
         env:
           GH_TOKEN: ${{ github.token }}

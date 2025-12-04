@@ -37,16 +37,25 @@ Components use a two-stage release process for safety and control:
 
 ### Release Process Overview
 
-**Step 1: Create Git Tag**
+**Step 1: Create Git Tag on Main Branch**
 
-Tag the commit you want to release:
+**IMPORTANT:** Tags must be created on the `main` branch. The publish workflow will validate this.
 
 ```bash
+# Ensure you're on main and up to date
+git checkout main
+git pull origin main
+
+# Tag the commit
 git tag 1.0.0
+
+# Push tag to remote
 git push origin 1.0.0
 ```
 
 The tag can be any name (e.g., `1.0.0`, `v1.0.0`, `release-2024-12`). It marks the exact code snapshot to build from.
+
+**Note:** If you tag a commit not on `main`, the publish workflow will fail with an error.
 
 **Step 2: Trigger Publish Workflow**
 
