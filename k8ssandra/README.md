@@ -60,7 +60,7 @@ export AXON_AGENT_KEY="your-key"
 export AXON_AGENT_ORG="your-org"
 export AXON_AGENT_HOST="agents.axonops.cloud"
 
-cat k8ssandra/examples/axon-cluster.yml | envsubst | kubectl apply -f -
+cat examples/axon-cluster.yml | envsubst | kubectl apply -f -
 ```
 
 See [Deploying to Kubernetes](#deploying-to-kubernetes) for detailed instructions.
@@ -123,7 +123,7 @@ export IMAGE_NAME="your-registry/your-image:tag"
 Use the rebuild script to build, push, and deploy your cluster:
 
 ```bash
-cd k8ssandra/5.0
+cd 5.0
 ../scripts/rebuild.sh
 ```
 
@@ -140,7 +140,7 @@ The script will:
 If you prefer to build images yourself instead of using the [pre-built images](#pre-built-docker-images):
 
 ```bash
-cd k8ssandra/5.0
+cd 5.0
 docker build -t your-registry/axonops-cassandra:5.0.6 .
 docker push your-registry/axonops-cassandra:5.0.6
 ```
@@ -159,7 +159,7 @@ export AXON_AGENT_ORG="your-org"
 export AXON_AGENT_HOST="agents.axonops.cloud"
 
 # Apply the configuration
-cat k8ssandra/examples/axon-cluster.yml | envsubst | kubectl apply -f -
+cat examples/axon-cluster.yml | envsubst | kubectl apply -f -
 ```
 
 ### Verifying the Deployment
@@ -292,7 +292,7 @@ export AXON_AGENT_KEY="your-key"
 export AXON_AGENT_ORG="your-org"
 export AXON_AGENT_HOST="your-host"  # Optional
 
-cd k8ssandra/5.0
+cd 5.0
 ../scripts/rebuild.sh
 ```
 
@@ -373,7 +373,7 @@ To use this example:
 
 1. Copy the example file:
    ```bash
-   cp k8ssandra/examples/axon-cluster.yml my-cluster.yml
+   cp examples/axon-cluster.yml my-cluster.yml
    ```
 
 2. Update the values in `my-cluster.yml`:
