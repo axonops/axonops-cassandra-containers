@@ -1,4 +1,4 @@
-# AxonOps Cassandra Containers
+# AxonOps K8ssandra Containers
 
 Docker containers for Apache Cassandra with integrated AxonOps monitoring and management agent, designed for deployment on Kubernetes using K8ssandra Operator.
 
@@ -397,7 +397,7 @@ To use this example:
 
 The repository includes a GitHub Actions workflow that automatically builds and publishes Docker images.
 
-**Workflow:** `.github/workflows/build-and-publish-5.0.yml`
+**Workflow:** `.github/workflows/k8ssandra-build-and-publish-5.0.yml`
 
 **Triggers:**
 - Push to `main` branch - runs tests only

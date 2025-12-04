@@ -46,7 +46,7 @@ axonops-cassandra-containers/
 
 ### Location
 - All workflows live at `.github/workflows/` (top-level only)
-- Name workflows clearly: `build-and-publish-<component>.yml`
+- Name workflows clearly: `<component>-build-and-publish-<version>.yml`
 
 ### Structure
 - Use matrix builds to avoid duplication
