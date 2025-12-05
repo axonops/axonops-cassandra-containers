@@ -11,7 +11,6 @@ COPY axonops-yum-repo.repo /etc/yum.repos.d/axonops-yum.repo
 # Update all packages to latest versions (security patches)
 RUN echo "Updating all packages to latest versions..." && \
     microdnf update -y && \
-    echo "Updated Java version:" && java -version 2>&1 | head -1 && \
     microdnf clean all && \
     rm -rf /var/cache/yum /var/cache/dnf
 
