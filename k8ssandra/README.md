@@ -37,7 +37,17 @@ When version `5.0.6-1.0.1` is built, it gets tagged as:
 - `5.0-latest` (retag, because 5.0.6 is the highest 5.0.x patch)
 - `latest` (retag, because 5.0.6 is the highest overall version)
 
-### 💡 Production Best Practice
+### Supported Cassandra Versions
+
+**Currently Supported:**
+- **5.0.x:** 5.0.1, 5.0.2, 5.0.3, 5.0.4, 5.0.5, 5.0.6 (6 versions)
+
+**Future Support:**
+- **4.0.x and 4.1.x:** Available in repository but not yet published due to AxonOps agent compatibility issues. Reach out if you need these versions.
+
+Browse all available tags: [GitHub Container Registry](https://github.com/axonops/axonops-cassandra-containers/pkgs/container/axonops-cassandra-containers)
+
+## 💡 Production Best Practice
 
 ⚠️ **Using ANY `-latest` tags in production is an anti-pattern**. This includes `latest`, `5.0-latest`, and `5.0.6-latest` because:
 - **No audit trail**: You cannot determine which exact version was deployed at a given time
@@ -52,17 +62,7 @@ When version `5.0.6-1.0.1` is built, it gets tagged as:
 
 **Image Updates with K8ssandra:** When you update the container image in your K8ssandraCluster manifest, the K8ssandra Operator handles the rolling update process. See the [K8ssandra Operator documentation](https://docs.k8ssandra.io/) for details on upgrade procedures and best practices.
 
-### Supported Cassandra Versions
-
-**Currently Supported Cassandra Versions:**
-- **5.0.x:** 5.0.1, 5.0.2, 5.0.3, 5.0.4, 5.0.5, 5.0.6 (6 versions)
-
-**Future Support:**
-- **4.0.x and 4.1.x:** Available in repository but not yet published due to AxonOps agent compatibility issues. Reach out if you need these versions.
-
-Browse all available tags: [GitHub Container Registry](https://github.com/axonops/axonops-cassandra-containers/pkgs/container/axonops-cassandra-containers)
-
-### Quick Start with Docker/Podman
+## Quick Start with Docker/Podman
 
 Run a single-node Cassandra instance locally:
 
