@@ -4,6 +4,25 @@
 
 Docker containers for Apache Cassandra with integrated AxonOps monitoring and management agent, designed for deployment on Kubernetes using K8ssandra Operator.
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Pre-built Docker Images](#pre-built-docker-images)
+- [Production Best Practice](#-production-best-practice)
+- [Quick Start with Docker/Podman](#quick-start-with-dockerpodman)
+- [Prerequisites](#prerequisites)
+- [Supported Cassandra Versions](#supported-cassandra-versions)
+- [Getting Started](#getting-started)
+- [Building Docker Images](#building-docker-images)
+- [Deploying to Kubernetes](#deploying-to-kubernetes)
+- [Configuration](#configuration)
+- [Scripts Reference](#scripts-reference)
+- [Examples](#examples)
+- [CI/CD Pipeline](#cicd-pipeline)
+- [Monitoring with AxonOps](#monitoring-with-axonops)
+- [Troubleshooting](#troubleshooting)
+- [Production Considerations](#production-considerations)
+
 ## Overview
 
 This repository provides pre-configured Docker images that combine:
