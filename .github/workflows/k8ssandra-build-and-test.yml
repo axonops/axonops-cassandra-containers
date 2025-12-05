@@ -10,6 +10,7 @@ on:
     paths:
       - 'k8ssandra/**'
       - '.github/workflows/k8ssandra-build-and-test.yml'
+      - '.github/actions/k8ssandra-*/**'
   pull_request:
     branches:
       - main
