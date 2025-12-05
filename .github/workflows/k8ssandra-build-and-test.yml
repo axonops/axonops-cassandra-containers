@@ -53,7 +53,7 @@ jobs:
           load: true
           tags: axonops-cassandra:test
           build-args: |
-            CASSANDRA_VERSION=${{ steps.version.outputs.base_version }}
+            CASSANDRA_VERSION=${{ matrix.cassandra_version }}
             MAJOR_VERSION=${{ steps.version.outputs.base_version }}
 
       - name: Start container
