@@ -17,6 +17,7 @@ on:
     paths:
       - 'k8ssandra/**'
       - '.github/workflows/k8ssandra-build-and-test.yml'
+      - '.github/actions/k8ssandra-*/**'
   workflow_call:
     inputs:
       cassandra_version:
