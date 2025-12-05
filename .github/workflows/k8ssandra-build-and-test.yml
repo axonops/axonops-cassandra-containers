@@ -164,6 +164,34 @@ jobs:
 
           echo "✓ Cassandra version ${EXPECTED_VERSION} verified in logs"
 
+      - name: Verify Java version is correct
+        run: |
+          echo "=== Verifying Java version ==="
+
+          # Get Java version from container
+          JAVA_VERSION=$(docker exec cassandra-test java -version 2>&1 | head -1)
+          echo "Java version: ${JAVA_VERSION}"
+
+          # Determine expected Java version based on Cassandra version
+          CASSANDRA_MAJOR=$(echo "${{ matrix.cassandra_version }}" | cut -d. -f1)
+          if [ "$CASSANDRA_MAJOR" = "4" ]; then
+            EXPECTED_JAVA="11"
+            echo "Expected Java: 11 (for Cassandra 4.x)"
+          else
+            EXPECTED_JAVA="17"
+            echo "Expected Java: 17 (for Cassandra 5.x)"
+          fi
+
+          # Check if correct Java version is installed
+          if ! echo "$JAVA_VERSION" | grep -q "version \"${EXPECTED_JAVA}"; then
+            echo "ERROR: Wrong Java version!"
+            echo "Expected Java ${EXPECTED_JAVA} for Cassandra ${{ matrix.cassandra_version }}"
+            echo "Found: ${JAVA_VERSION}"
+            exit 1
+          fi
+
+          echo "✓ Java ${EXPECTED_JAVA} verified for Cassandra ${CASSANDRA_MAJOR}.x"
+
       - name: Test Management API endpoints
         run: |
           echo "=== Testing Management API endpoints ==="
