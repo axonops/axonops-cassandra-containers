@@ -3,6 +3,14 @@ FROM docker.io/k8ssandra/cass-management-api:${CASSANDRA_VERSION}-ubi
 
 RUN echo "AXONOPS_BUILD: Inheriting from k8ssandra/cass-management-api:${CASSANDRA_VERSION}-ubi"
 
+LABEL maintainer="AxonOps <info@axonops.com>"
+LABEL name="AxonOps K8ssandra Apache Cassandra"
+LABEL vendor="AxonOps"
+LABEL url="https://axonops.com"
+LABEL release="${CASSANDRA_VERSION}"
+LABEL summary="Apache Cassandra with integrated AxonOps monitoring and management agent, designed for deployment on Kubernetes using K8ssandra Operator."
+LABEL description="Docker container combining Apache Cassandra ${CASSANDRA_VERSION}, K8ssandra Management API, AxonOps Agent for monitoring and management, and cqlai modern CQL shell. Optimized for Kubernetes deployments with jemalloc memory optimization."
+
 ENV AXON_AGENT_LOG_OUTPUT=std
 ARG MAJOR_VERSION=4.1
 ARG TARGETARCH
