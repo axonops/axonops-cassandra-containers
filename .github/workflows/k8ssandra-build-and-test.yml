@@ -298,8 +298,8 @@ jobs:
         run: |
           echo "=== Verifying jemalloc configuration ==="
 
-          # Get container logs
-          LOGS=$(docker logs cassandra-test 2>&1)
+          # Get Cassandra system log (jemalloc messages go here, not stdout)
+          LOGS=$(docker exec cassandra-test cat /var/log/cassandra/system.log 2>/dev/null || echo "")
 
           # Check for jemalloc warning (WARN level)
           if echo "$LOGS" | grep -iq ".*WARN.*jemalloc shared library could not be preloaded.*"; then
@@ -307,7 +307,7 @@ jobs:
             echo "jemalloc is not properly configured or installed"
             echo ""
             echo "Relevant logs:"
-            docker logs cassandra-test 2>&1 | grep -i jemalloc
+            docker exec cassandra-test cat /var/log/cassandra/system.log | grep -i jemalloc
             exit 1
           fi
 
@@ -317,7 +317,7 @@ jobs:
             echo "jemalloc may not be loaded correctly"
             echo ""
             echo "All jemalloc-related logs:"
-            docker logs cassandra-test 2>&1 | grep -i jemalloc
+            docker exec cassandra-test cat /var/log/cassandra/system.log | grep -i jemalloc || echo "(no jemalloc messages found)"
             exit 1
           fi
 
