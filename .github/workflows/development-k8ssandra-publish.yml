@@ -78,7 +78,7 @@ jobs:
           load: true
           tags: axonops-cassandra:test
           build-args: |
-            CASSANDRA_VERSION=${{ steps.version.outputs.base_version }}
+            CASSANDRA_VERSION=${{ matrix.cassandra_version }}
             MAJOR_VERSION=${{ steps.version.outputs.base_version }}
 
       - name: Start container
@@ -374,7 +374,7 @@ jobs:
             org.opencontainers.image.version=${{ inputs.container_version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           build-args: |
-            CASSANDRA_VERSION=${{ steps.version.outputs.base_version }}
+            CASSANDRA_VERSION=${{ matrix.cassandra_version }}
             MAJOR_VERSION=${{ steps.version.outputs.base_version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
