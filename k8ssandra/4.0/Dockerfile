@@ -9,7 +9,7 @@ ARG VCS_REF
 ARG VERSION
 
 # Legacy labels (for backward compatibility)
-LABEL maintainer="AxonOps <info@axonops.com>"
+LABEL maintainer="AxonOps"
 LABEL name="AxonOps K8ssandra Apache Cassandra"
 LABEL vendor="AxonOps"
 LABEL url="https://axonops.com"
@@ -19,7 +19,7 @@ LABEL description="Docker container combining Apache Cassandra ${CASSANDRA_VERSI
 
 # OCI standard labels
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
-LABEL org.opencontainers.image.authors="AxonOps <info@axonops.com>"
+LABEL org.opencontainers.image.authors="AxonOps"
 LABEL org.opencontainers.image.url="https://axonops.com"
 LABEL org.opencontainers.image.documentation="https://github.com/axonops/axonops-containers/blob/main/k8ssandra/README.md"
 LABEL org.opencontainers.image.source="https://github.com/axonops/axonops-containers"
