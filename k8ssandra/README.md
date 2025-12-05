@@ -39,7 +39,7 @@ When version `5.0.6-1.0.1` is built, it gets tagged as:
 
 **Production Best Practice:**
 
-Using `latest`, `5.0-latest`, or `{VERSION}-latest` tags in production is an **anti-pattern** because:
+Using ANY `-latest` tags in production is an **anti-pattern**. This includes `latest`, `5.0-latest`, and `5.0.6-latest` because:
 - **No audit trail**: You cannot determine which exact version was deployed at a given time
 - **Unexpected updates**: Kubernetes may pull a new image during pod restarts, causing unintended version changes
 - **Rollback difficulties**: You cannot reliably roll back to a previous version
