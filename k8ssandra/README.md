@@ -18,15 +18,30 @@ Pre-built images are available from GitHub Container Registry (GHCR). This is th
 
 ### Available Images
 
-Images are tagged with both specific versions and major-version latest tags:
+Images use a multi-dimensional tagging strategy for flexibility:
 
-| Tag Pattern | Example | Description |
-|-------------|---------|-------------|
-| `<version>-<release>` | `5.0.6-1.0.0` | Specific Cassandra version with release tag |
-| `4.0-latest` | `4.0-latest` | Latest 4.0.x version (currently 4.0.19) |
-| `4.1-latest` | `4.1-latest` | Latest 4.1.x version (currently 4.1.10) |
-| `5.0-latest` | `5.0-latest` | Latest 5.0.x version (currently 5.0.6) |
-| `latest` | `latest` | Latest overall version (currently 5.0.6) |
+| Tag Pattern | Example | Description | Use Case |
+|-------------|---------|-------------|----------|
+| `{CASSANDRA_VERSION}-{AXONOPS_VERSION}` | `5.0.6-1.0.0` | Immutable, specific version | **Production**: Pin exact versions for auditability |
+| `{CASSANDRA_VERSION}-latest` | `5.0.6-latest` | Latest AxonOps version for this Cassandra patch | Track AxonOps updates for a specific Cassandra patch |
+| `{CASSANDRA_MINOR}-latest` | `5.0-latest` | Latest patch in this Cassandra minor line | Track latest Cassandra patch in a major version (currently 5.0.6) |
+| `latest` | `latest` | Latest across all versions | Quick trials and documentation (currently 5.0.6) |
+
+**Tagging Examples:**
+
+When version `5.0.6-1.0.1` is built, it gets tagged as:
+- `5.0.6-1.0.1` (immutable)
+- `5.0.6-latest` (retag)
+- `5.0-latest` (retag, because 5.0.6 is the highest 5.0.x patch)
+- `latest` (retag, because 5.0.6 is the highest overall version)
+
+When version `4.0.12-1.0.1` is built, it gets tagged as:
+- `4.0.12-1.0.1` (immutable)
+- `4.0.12-latest` (retag)
+- `4.0-latest` (retag, because 4.0.19 is the highest 4.0.x patch) - **only if this is 4.0.19**
+- `latest` - **not tagged** (5.0.6 is higher)
+
+**Important:** Kubernetes performs controlled rolling updates when image tags change. Updates happen one pod at a time with zero cluster downtime. Data is preserved; only the container image changes.
 
 **Supported Cassandra Versions:**
 - **4.0.x:** 4.0.5, 4.0.6, 4.0.7, 4.0.8, 4.0.9, 4.0.10, 4.0.11, 4.0.12, 4.0.13, 4.0.14, 4.0.15, 4.0.17, 4.0.18, 4.0.19 (14 versions)
@@ -472,21 +487,36 @@ The CI pipeline includes comprehensive testing:
 For complete release instructions, see [RELEASE.md](./RELEASE.md)
 
 **Image Tags:**
-Each release publishes 27 version-specific images plus 4 latest tags:
+Each release uses multi-dimensional tagging:
+
 ```
-ghcr.io/axonops/axonops-cassandra-containers:<cassandra-version>-<release-tag>
-ghcr.io/axonops/axonops-cassandra-containers:4.0-latest
-ghcr.io/axonops/axonops-cassandra-containers:4.1-latest
-ghcr.io/axonops/axonops-cassandra-containers:5.0-latest
-ghcr.io/axonops/axonops-cassandra-containers:latest
+ghcr.io/axonops/axonops-cassandra-containers:{CASSANDRA_VERSION}-{AXONOPS_VERSION}  # Immutable
+ghcr.io/axonops/axonops-cassandra-containers:{CASSANDRA_VERSION}-latest             # Patch-level latest
+ghcr.io/axonops/axonops-cassandra-containers:{CASSANDRA_MINOR}-latest               # Minor-level latest
+ghcr.io/axonops/axonops-cassandra-containers:latest                                 # Global latest
 ```
 
-Example: For release tag `1.0.0`, 31 total tags published:
-- 27 version-specific tags (e.g., `4.0.5-1.0.0`, `4.1.4-1.0.0`, `5.0.1-1.0.0`, ...)
-- `4.0-latest` → `4.0.19-1.0.0`
-- `4.1-latest` → `4.1.10-1.0.0`
-- `5.0-latest` → `5.0.6-1.0.0`
-- `latest` → `5.0.6-1.0.0`
+**Example:** For AxonOps release `1.0.1`, a total of 85 tags published:
+
+**Immutable tags** (27):
+- `4.0.5-1.0.1`, `4.0.6-1.0.1`, ..., `4.0.19-1.0.1` (14 tags)
+- `4.1.4-1.0.1`, `4.1.5-1.0.1`, ..., `4.1.10-1.0.1` (7 tags)
+- `5.0.1-1.0.1`, `5.0.2-1.0.1`, ..., `5.0.6-1.0.1` (6 tags)
+
+**Patch-level latest tags** (27):
+- `4.0.5-latest` → `4.0.5-1.0.1`
+- `4.0.6-latest` → `4.0.6-1.0.1`
+- ... (all 27 Cassandra versions)
+
+**Minor-level latest tags** (3):
+- `4.0-latest` → `4.0.19-1.0.1`
+- `4.1-latest` → `4.1.10-1.0.1`
+- `5.0-latest` → `5.0.6-1.0.1`
+
+**Global latest tag** (1):
+- `latest` → `5.0.6-1.0.1`
+
+**Total:** 58 tags (27 immutable + 27 patch-latest + 3 minor-latest + 1 global-latest)
 
 ## Monitoring with AxonOps
 
