@@ -14,7 +14,9 @@ RUN rpm -ivh https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.
     ln -sf /usr/lib64/libjemalloc.so.2 /usr/local/lib/libjemalloc.so && \
     echo "/usr/local/lib" > /etc/ld.so.conf.d/local.conf && \
     ldconfig && \
-    microdnf clean all
+    microdnf remove -y epel-release && \
+    microdnf clean all && \
+    rm -rf /var/cache/yum /var/cache/dnf
 
 # Install AxonOps agents and configure
 RUN groupadd --gid 9988 axonops && \
