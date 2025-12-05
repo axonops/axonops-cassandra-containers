@@ -141,6 +141,29 @@ jobs:
 
           echo "✓ jemalloc is properly configured and loaded successfully"
 
+      - name: Verify Cassandra version in logs
+        run: |
+          echo "=== Verifying Cassandra version ==="
+
+          # Get Cassandra system log
+          LOGS=$(docker exec cassandra-test cat /var/log/cassandra/system.log 2>/dev/null || echo "")
+
+          # Expected version from matrix
+          EXPECTED_VERSION="${{ matrix.cassandra_version }}"
+          echo "Expected Cassandra version: ${EXPECTED_VERSION}"
+
+          # Check for version log message
+          if ! echo "$LOGS" | grep -iq ".*INFO.*Cassandra version: ${EXPECTED_VERSION}"; then
+            echo "ERROR: Cassandra version ${EXPECTED_VERSION} not found in logs!"
+            echo "Container may be running wrong Cassandra version"
+            echo ""
+            echo "Version-related logs:"
+            docker exec cassandra-test cat /var/log/cassandra/system.log | grep -i "Cassandra version:" || echo "(no version messages found)"
+            exit 1
+          fi
+
+          echo "✓ Cassandra version ${EXPECTED_VERSION} verified in logs"
+
       - name: Test Management API endpoints
         run: |
           echo "=== Testing Management API endpoints ==="
