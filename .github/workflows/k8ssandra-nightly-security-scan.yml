@@ -86,12 +86,9 @@ jobs:
       - name: Send email notification
         uses: dawidd6/action-send-mail@v3
         with:
-          server_address: smtp.office365.com
-          server_port: 587
-          # secure: false with port 587 uses STARTTLS (encrypted connection)
-          # secure: true would use implicit SSL/TLS (port 465)
-          secure: false
-          connection_timeout: 30
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
           username: ${{ secrets.SMTP_USERNAME }}
           password: ${{ secrets.SMTP_PASSWORD }}
           subject: '[AxonOps Containers] Nightly Security Scan Failed - New CVEs Detected'

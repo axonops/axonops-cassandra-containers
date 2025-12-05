@@ -10,12 +10,9 @@ jobs:
       - name: Send test email
         uses: dawidd6/action-send-mail@v3
         with:
-          server_address: smtp.office365.com
-          server_port: 587
-          # secure: false with port 587 uses STARTTLS (encrypted connection)
-          # secure: true would use implicit SSL/TLS (port 465)
-          secure: false
-          connection_timeout: 30
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
           username: ${{ secrets.SMTP_USERNAME }}
           password: ${{ secrets.SMTP_PASSWORD }}
           subject: '[AxonOps Containers] Test Email Notification'
@@ -29,6 +26,6 @@ jobs:
             Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
             Configuration:
-            - SMTP Server: smtp.office365.com:587 (STARTTLS)
+            - SMTP Server: smtp.gmail.com:465 (SSL)
             - From: ${{ secrets.SMTP_USERNAME }}
-            - To: ${{ env.SECURITY_EMAIL }}
+            - To: ${{ vars.SECURITY_EMAIL }}
