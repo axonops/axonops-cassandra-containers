@@ -292,6 +292,25 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
 
+      - name: Verify jemalloc is loaded (no warnings)
+        run: |
+          echo "=== Verifying jemalloc configuration ==="
+
+          # Get container logs
+          LOGS=$(docker logs cassandra-test 2>&1)
+
+          # Check for jemalloc warning (WARN level)
+          if echo "$LOGS" | grep -iq ".*WARN.*jemalloc shared library could not be preloaded.*"; then
+            echo "ERROR: jemalloc warning found in logs!"
+            echo "jemalloc is not properly configured or installed"
+            echo ""
+            echo "Relevant logs:"
+            docker logs cassandra-test 2>&1 | grep -i jemalloc
+            exit 1
+          fi
+
+          echo "✓ No jemalloc warnings found - jemalloc is properly configured"
+
       - name: Cleanup
         if: always()
         run: |
