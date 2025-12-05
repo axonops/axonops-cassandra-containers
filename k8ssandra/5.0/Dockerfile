@@ -7,6 +7,18 @@ ARG TARGETARCH
 
 USER root
 COPY axonops-yum-repo.repo /etc/yum.repos.d/axonops-yum.repo
+
+# Install jemalloc for memory allocation optimization
+RUN rpm -ivh https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && \
+    microdnf install -y jemalloc && \
+    ln -sf /usr/lib64/libjemalloc.so.2 /usr/local/lib/libjemalloc.so && \
+    echo "/usr/local/lib" > /etc/ld.so.conf.d/local.conf && \
+    ldconfig && \
+    microdnf remove -y epel-release && \
+    microdnf clean all && \
+    rm -rf /var/cache/yum /var/cache/dnf
+
+# Install AxonOps agents and configure
 RUN groupadd --gid 9988 axonops && \
     useradd --gid 9988 --uid 9988 --shell /bin/bash -c "AxonOps" -G cassandra axonops && \
     usermod -aG axonops cassandra && \
@@ -14,7 +26,8 @@ RUN groupadd --gid 9988 axonops && \
     chown -R cassandra:cassandra /etc/axonops /var/lib/axonops /var/log/axonops && \
     chmod 755 /usr/share/axonops/axon-agent && \
     rm -f /etc/axonops/axon-agent.yml && \
-    touch /var/run/utmp
+    touch /var/run/utmp && \
+    microdnf clean all
 
 # Install cqlai (latest release)
 RUN RPM_ARCH=$([ "$TARGETARCH" = "amd64" ] && echo "x86_64" || echo "aarch64") && \
