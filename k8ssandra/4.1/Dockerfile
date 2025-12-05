@@ -1,6 +1,8 @@
 ARG CASSANDRA_VERSION=4.1
 FROM docker.io/k8ssandra/cass-management-api:${CASSANDRA_VERSION}-ubi
 
+RUN echo "AXONOPS_BUILD: Using Cassandra base image version: ${CASSANDRA_VERSION}"
+
 ENV AXON_AGENT_LOG_OUTPUT=std
 ARG MAJOR_VERSION=4.1
 ARG TARGETARCH
