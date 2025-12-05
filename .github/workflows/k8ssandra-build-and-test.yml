@@ -323,9 +323,36 @@ jobs:
 
           echo "✓ jemalloc is properly configured and loaded successfully"
 
+      - name: Collect container logs for artifacts
+        if: always()
+        run: |
+          echo "=== Collecting logs from container ==="
+          mkdir -p /tmp/cassandra-logs
+
+          # Collect Cassandra logs
+          docker exec cassandra-test cat /var/log/cassandra/system.log > /tmp/cassandra-logs/system.log 2>/dev/null || echo "system.log not found" > /tmp/cassandra-logs/system.log
+          docker exec cassandra-test cat /var/log/cassandra/gc.log > /tmp/cassandra-logs/gc.log 2>/dev/null || echo "gc.log not found" > /tmp/cassandra-logs/gc.log
+          docker exec cassandra-test cat /var/log/cassandra/debug.log > /tmp/cassandra-logs/debug.log 2>/dev/null || echo "debug.log not found" > /tmp/cassandra-logs/debug.log
+
+          # Collect AxonOps agent logs
+          docker exec cassandra-test cat /var/log/axonops/axon-agent.log > /tmp/cassandra-logs/axon-agent.log 2>/dev/null || echo "axon-agent.log not found" > /tmp/cassandra-logs/axon-agent.log
+
+          # Collect docker container logs (stdout/stderr)
+          docker logs cassandra-test > /tmp/cassandra-logs/docker-stdout.log 2>&1 || true
+
+          echo "Logs collected to /tmp/cassandra-logs"
+          ls -lh /tmp/cassandra-logs
+
+      - name: Upload logs as artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cassandra-logs-${{ matrix.cassandra_version }}
+          path: /tmp/cassandra-logs/
+          retention-days: 7
+
       - name: Cleanup
         if: always()
         run: |
-          docker logs cassandra-test || true
           docker stop cassandra-test || true
           docker rm cassandra-test || true
