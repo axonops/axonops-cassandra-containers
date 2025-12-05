@@ -6,13 +6,14 @@ ARG MAJOR_VERSION=5.0
 ARG TARGETARCH
 
 USER root
-COPY axonops-yum-repo.repo /etc/yum.repos.d/axonops-yum.repo
 
 # Update all packages to latest versions (security patches)
 RUN echo "Updating all packages to latest versions..." && \
     microdnf update -y && \
     microdnf clean all && \
     rm -rf /var/cache/yum /var/cache/dnf
+
+COPY axonops-yum-repo.repo /etc/yum.repos.d/axonops-yum.repo
 
 # Install jemalloc for memory allocation optimization
 RUN rpm -ivh https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && \
