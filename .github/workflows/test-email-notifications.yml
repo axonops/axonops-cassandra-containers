@@ -1,0 +1,34 @@
+name: Test Email Notifications
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-email:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send test email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.office365.com
+          server_port: 587
+          # secure: false with port 587 uses STARTTLS (encrypted connection)
+          # secure: true would use implicit SSL/TLS (port 465)
+          secure: false
+          connection_timeout: 30
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: '[AxonOps Containers] Test Email Notification'
+          to: ${{ vars.SECURITY_EMAIL }}
+          from: ${{ secrets.SMTP_USERNAME }}
+          body: |
+            This is a test email from GitHub Actions to verify SMTP configuration.
+
+            If you receive this email, the email notification system is working correctly.
+
+            Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Configuration:
+            - SMTP Server: smtp.office365.com:587 (STARTTLS)
+            - From: ${{ secrets.SMTP_USERNAME }}
+            - To: ${{ env.SECURITY_EMAIL }}
