@@ -9,16 +9,12 @@ USER root
 COPY axonops-yum-repo.repo /etc/yum.repos.d/axonops-yum.repo
 
 # Install jemalloc for memory allocation optimization
-RUN microdnf -y install jemalloc && \
+RUN rpm -ivh https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && \
+    microdnf install -y jemalloc && \
+    ln -sf /usr/lib64/libjemalloc.so.2 /usr/local/lib/libjemalloc.so && \
+    echo "/usr/local/lib" > /etc/ld.so.conf.d/local.conf && \
+    ldconfig && \
     microdnf clean all
-
-# Create jemalloc symlink for Cassandra
-# Cassandra looks for libjemalloc.so but UBI provides versioned library
-RUN libjemalloc="$(find /usr/lib64 /usr/lib -name 'libjemalloc.so.*' 2>/dev/null | head -1)" && \
-    if [ -n "$libjemalloc" ]; then \
-        ln -sT "$libjemalloc" /usr/local/lib/libjemalloc.so && \
-        ldconfig; \
-    fi
 
 # Install AxonOps agents and configure
 RUN groupadd --gid 9988 axonops && \
