@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Currently only testing 5.0 (4.0/4.1 support pending AxonOps agent fixes)
+        # Test 5.0.6 first (4.0/4.1 support pending AxonOps agent fixes)
         cassandra_version: [5.0.6]
     steps:
       - name: Checkout code at tag

@@ -457,7 +457,7 @@ The repository includes a GitHub Actions workflow that automatically builds and 
 
 **Test Suite:**
 The CI pipeline includes comprehensive testing:
-- Tests run for Cassandra 5.0.6 (currently only 5.0 published)
+- Tests run for 5.0.6 first, then other 5.0 versions in parallel (5.0.1-5.0.5)
 - Management API health checks (liveness, readiness)
 - Management API Java agent operations (create keyspace, table, flush, compact)
 - CQL operations using cqlai (CREATE, INSERT, SELECT, DROP)
@@ -472,8 +472,8 @@ The CI pipeline includes comprehensive testing:
 1. Developer creates git tag (e.g., `git tag 1.0.0 && git push origin 1.0.0`)
 2. Developer triggers publish workflow via GitHub UI or `gh workflow run`
 3. Workflow validates version doesn't exist in GHCR
-4. Full test suite runs on tagged code for 5.0.6
-5. Multi-arch images (amd64, arm64) built for all 6 versions of 5.0 (max 3 concurrent)
+4. Full test suite runs on 5.0.6 first to validate
+5. Multi-arch images (amd64, arm64) built for all 6 versions (max 3 concurrent)
 6. Images pushed to GHCR with version-specific and latest tags
 7. GitHub Release created automatically
 
