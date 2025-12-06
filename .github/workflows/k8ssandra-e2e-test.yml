@@ -27,8 +27,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/helm
-          key: helm-${{ runner.os }}-${{ hashFiles('**/Chart.yaml', '**/Chart.lock') }}
+          key: helm-${{ runner.os }}-certmanager-v1.15.3-k8ssandra-1.29.0
           restore-keys: |
+            helm-${{ runner.os }}-certmanager-v1.15.3-
             helm-${{ runner.os }}-
 
       - name: Generate cluster name
