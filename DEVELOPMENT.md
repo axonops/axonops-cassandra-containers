@@ -78,12 +78,6 @@ axonops-cassandra-containers/
 - **External dependencies (Helm, etc.):** Use date-based cache keys (e.g., `helm-${{ runner.os }}-$(date +%Y-%m-%d)`) for daily refresh
 - **Never cache indefinitely** - Always include version or date in cache key
 
-### End-to-End Testing
-- Create E2E workflows that deploy to real Kubernetes (k3s on GitHub runners)
-- Test full deployment lifecycle, not just Docker builds
-- Validate integration with external services (AxonOps SaaS, etc.)
-- Name workflow: `<component>-e2e-test.yml`
-- Use composite actions for reusability
 
 ### Publishing
 - Publish to GHCR: `ghcr.io/axonops/<image-name>:<tag>`
@@ -92,30 +86,12 @@ axonops-cassandra-containers/
 - Only publish on version tags (semantic versioning)
 
 ### Testing
-Every component should have multiple test workflows:
-
-**Build and Test (`<component>-build-and-test.yml`):**
+Every workflow must include:
 - Container build verification
 - Service health checks (liveness/readiness)
-- Functional tests (API endpoints, CQL operations, etc.)
+- Functional tests appropriate for the component
 - Process ownership verification (non-root)
 - Security scanning (Trivy)
-- Triggers: Push to main/development, PRs
-
-**E2E Test (`<component>-e2e-test.yml`):**
-- Deploy to real Kubernetes cluster (k3s on GitHub runner)
-- Full integration testing with external services
-- Validate complete deployment lifecycle
-- Triggers: Manual (`workflow_dispatch`)
-
-**Security Scan (`<component>-nightly-security-scan.yml`):**
-- Scheduled CVE scanning of published images
-- Email notifications on CRITICAL/HIGH vulnerabilities
-- Triggers: Daily schedule, manual
-
-**Test Email (`test-email-notifications.yml`):**
-- Validate email notification configuration
-- Triggers: Manual only
 
 ## Adding a New Component
 
