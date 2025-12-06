@@ -73,6 +73,21 @@ RUN RPM_ARCH=$([ "$TARGETARCH" = "amd64" ] && echo "x86_64" || echo "aarch64") &
     rpm -i https://github.com/axonops/cqlai/releases/download/v${CQLAI_VERSION}/cqlai-${CQLAI_VERSION}-1.${RPM_ARCH}.rpm && \
     rm -rf /var/tmp/rpm-* /var/cache/yum /var/cache/dnf
 
+# Write build information to file for runtime access (after all packages installed)
+# Values are quoted for safe sourcing in bash
+RUN echo "CONTAINER_VERSION=\"${VERSION}\"" > /etc/axonops/build-info.txt && \
+    echo "CONTAINER_REVISION=\"${VCS_REF}\"" >> /etc/axonops/build-info.txt && \
+    echo "CONTAINER_BUILD_DATE=\"${BUILD_DATE}\"" >> /etc/axonops/build-info.txt && \
+    echo "CASSANDRA_VERSION=\"${CASSANDRA_VERSION}\"" >> /etc/axonops/build-info.txt && \
+    echo "JAVA_VERSION=\"$(java -version 2>&1 | head -1 | sed 's/.*"\(.*\)".*/\1/' || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
+    echo "AXON_AGENT_VERSION=\"$(/usr/share/axonops/axon-agent --version 2>&1 | head -1 || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
+    echo "AXON_JAVA_AGENT_VERSION=\"$(rpm -q axon-cassandra5.0-agent-jdk17 2>/dev/null || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
+    echo "CQLAI_VERSION=\"$(cqlai --version 2>&1 | head -1 || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
+    echo "JEMALLOC_VERSION=\"$(rpm -q jemalloc 2>/dev/null || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
+    echo "OS_VERSION=\"$(grep PRETTY_NAME /etc/os-release 2>/dev/null | sed 's/.*="\(.*\)"/\1/' || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
+    echo "PLATFORM=\"$(uname -m || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
+    chown cassandra:cassandra /etc/axonops/build-info.txt || true
+
 COPY axonops-entrypoint.sh /axonops-entrypoint.sh
 RUN chmod 755 /axonops-entrypoint.sh
 
