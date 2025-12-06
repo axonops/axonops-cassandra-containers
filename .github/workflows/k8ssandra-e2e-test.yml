@@ -29,7 +29,8 @@ jobs:
         run: |
           # Extract version from container image (e.g., 5.0.6-1.0.3 -> 5-0-6-1-0-3)
           IMAGE_TAG=$(echo "${{ inputs.container_image }}" | sed 's/.*://; s/\./-/g')
-          CLUSTER_NAME="github-ci-${IMAGE_TAG}"
+          TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
+          CLUSTER_NAME="github-ci-${IMAGE_TAG}-${TIMESTAMP}"
           echo "cluster_name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
           echo "Cluster name: ${CLUSTER_NAME}"
 
