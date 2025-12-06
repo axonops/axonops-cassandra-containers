@@ -1,0 +1,301 @@
+name: K8ssandra E2E Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      container_image:
+        description: 'Container image to test (e.g., ghcr.io/axonops/axonops-cassandra-containers:5.0.6-1.0.3)'
+        required: false
+        default: 'ghcr.io/axonops/axonops-cassandra-containers:5.0.6-1.0.3'
+      cassandra_version:
+        description: 'Cassandra version (e.g., 5.0.6)'
+        required: false
+        default: '5.0.6'
+
+env:
+  CLUSTER_NAME: test-cluster
+  NAMESPACE: k8ssandra-operator
+
+jobs:
+  e2e-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Phase 1: Setup k3s cluster
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup k3s cluster
+        uses: AbsaOSS/k3d-action@v2
+        with:
+          cluster-name: test-cluster
+          args: >-
+            --agents 1
+            --no-lb
+            --k3s-arg "--disable=traefik,servicelb@server:*"
+
+      - name: Verify k3s cluster
+        run: |
+          echo "=== Verifying k3s cluster ==="
+          kubectl cluster-info
+          kubectl get nodes
+          kubectl version --short
+
+      # Phase 2: Install K8ssandra operator
+      - name: Install cert-manager
+        run: |
+          echo "=== Installing cert-manager ==="
+          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.3/cert-manager.yaml
+
+          echo "Waiting for cert-manager to be ready..."
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
+
+          echo "✓ cert-manager ready"
+
+      - name: Install K8ssandra operator
+        run: |
+          echo "=== Installing K8ssandra operator ==="
+
+          helm repo add k8ssandra https://helm.k8ssandra.io/stable
+          helm repo update
+
+          helm install k8ssandra-operator k8ssandra/k8ssandra-operator \
+            -n ${{ env.NAMESPACE }} \
+            --create-namespace \
+            --wait \
+            --timeout 5m
+
+          echo "✓ K8ssandra operator installed"
+
+      - name: Verify K8ssandra operator
+        run: |
+          echo "=== Verifying K8ssandra operator ==="
+          kubectl get pods -n ${{ env.NAMESPACE }}
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=k8ssandra-operator -n ${{ env.NAMESPACE }} --timeout=300s
+          echo "✓ K8ssandra operator ready"
+
+      # Phase 3: Deploy K8ssandraCluster with AxonOps
+      - name: Create K8ssandraCluster manifest
+        run: |
+          echo "=== Creating K8ssandraCluster manifest ==="
+          cat <<EOF > k8ssandra-cluster.yaml
+          apiVersion: k8ssandra.io/v1alpha1
+          kind: K8ssandraCluster
+          metadata:
+            name: ${{ env.CLUSTER_NAME }}
+            namespace: ${{ env.NAMESPACE }}
+          spec:
+            cassandra:
+              serverVersion: "${{ inputs.cassandra_version }}"
+              serverImage: "${{ inputs.container_image }}"
+              datacenters:
+                - metadata:
+                    name: dc1
+                  size: 1
+                  resources:
+                    requests:
+                      cpu: 500m
+                      memory: 1Gi
+                    limits:
+                      cpu: 1000m
+                      memory: 2Gi
+                  storageConfig:
+                    cassandraDataVolumeClaimSpec:
+                      accessModes:
+                        - ReadWriteOnce
+                      resources:
+                        requests:
+                          storage: 1Gi
+                  config:
+                    jvmOptions:
+                      heap:
+                        initial: 512M
+                        max: 512M
+                  podTemplateSpec:
+                    spec:
+                      containers:
+                        - name: cassandra
+                          env:
+                            - name: AXON_AGENT_KEY
+                              value: "${{ secrets.AXONOPS_AGENT_KEY }}"
+                            - name: AXON_AGENT_ORG
+                              value: "${{ vars.AXONOPS_AGENT_ORG }}"
+                            - name: AXON_AGENT_HOST
+                              value: "${{ vars.AXONOPS_SERVER }}"
+          EOF
+
+          echo "Manifest created:"
+          cat k8ssandra-cluster.yaml
+
+      - name: Deploy K8ssandraCluster
+        run: |
+          echo "=== Deploying K8ssandraCluster ==="
+          kubectl apply -f k8ssandra-cluster.yaml
+
+          echo "Waiting for Cassandra pod to be created..."
+          sleep 10
+          kubectl get pods -n ${{ env.NAMESPACE }}
+
+      - name: Wait for Cassandra to be ready
+        run: |
+          echo "=== Waiting for Cassandra to be ready ==="
+
+          # Wait for pod to exist
+          for i in {1..60}; do
+            if kubectl get pod ${{ env.CLUSTER_NAME }}-dc1-default-sts-0 -n ${{ env.NAMESPACE }} 2>/dev/null; then
+              echo "Pod exists"
+              break
+            fi
+            echo "Waiting for pod to be created... ($i/60)"
+            sleep 5
+          done
+
+          # Wait for pod to be ready (Cassandra startup can take 5-10 minutes)
+          echo "Waiting for pod to be ready (this may take 5-10 minutes)..."
+          kubectl wait --for=condition=ready pod/${{ env.CLUSTER_NAME }}-dc1-default-sts-0 \
+            -n ${{ env.NAMESPACE }} \
+            --timeout=600s
+
+          echo "✓ Cassandra pod ready"
+
+      # Phase 4: CQL smoke tests
+      - name: Get Cassandra credentials
+        id: creds
+        run: |
+          echo "=== Getting Cassandra credentials ==="
+
+          # Wait for superuser secret to be created
+          for i in {1..30}; do
+            if kubectl get secret ${{ env.CLUSTER_NAME }}-superuser -n ${{ env.NAMESPACE }} 2>/dev/null; then
+              echo "Secret exists"
+              break
+            fi
+            echo "Waiting for superuser secret... ($i/30)"
+            sleep 2
+          done
+
+          CASS_USER=$(kubectl get secret ${{ env.CLUSTER_NAME }}-superuser -n ${{ env.NAMESPACE }} -o jsonpath='{.data.username}' | base64 -d)
+          CASS_PASS=$(kubectl get secret ${{ env.CLUSTER_NAME }}-superuser -n ${{ env.NAMESPACE }} -o jsonpath='{.data.password}' | base64 -d)
+
+          echo "cassandra_user=$CASS_USER" >> $GITHUB_OUTPUT
+          echo "cassandra_pass=$CASS_PASS" >> $GITHUB_OUTPUT
+          echo "✓ Credentials retrieved"
+
+      - name: Run CQL smoke tests
+        run: |
+          echo "=== Running CQL smoke tests ==="
+          POD_NAME="${{ env.CLUSTER_NAME }}-dc1-default-sts-0"
+
+          # Test 1: Create keyspace
+          echo "Test 1: Creating keyspace..."
+          kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra -- \
+            cqlsh -u "${{ steps.creds.outputs.cassandra_user }}" -p "${{ steps.creds.outputs.cassandra_pass }}" \
+            -e "CREATE KEYSPACE IF NOT EXISTS test_ks WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
+          echo "✓ Keyspace created"
+
+          # Test 2: Create table
+          echo "Test 2: Creating table..."
+          kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra -- \
+            cqlsh -u "${{ steps.creds.outputs.cassandra_user }}" -p "${{ steps.creds.outputs.cassandra_pass }}" \
+            -e "CREATE TABLE IF NOT EXISTS test_ks.test_table (id int PRIMARY KEY, value text, created_at timestamp);"
+          echo "✓ Table created"
+
+          # Test 3: Insert data
+          echo "Test 3: Inserting data..."
+          kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra -- \
+            cqlsh -u "${{ steps.creds.outputs.cassandra_user }}" -p "${{ steps.creds.outputs.cassandra_pass }}" \
+            -e "INSERT INTO test_ks.test_table (id, value, created_at) VALUES (1, 'test_value', toTimestamp(now()));"
+          echo "✓ Data inserted"
+
+          # Test 4: Query data
+          echo "Test 4: Querying data..."
+          RESULT=$(kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra -- \
+            cqlsh -u "${{ steps.creds.outputs.cassandra_user }}" -p "${{ steps.creds.outputs.cassandra_pass }}" \
+            -e "SELECT * FROM test_ks.test_table WHERE id = 1;" | grep "test_value" || echo "")
+
+          if [ -z "$RESULT" ]; then
+            echo "ERROR: Query did not return expected data!"
+            exit 1
+          fi
+          echo "✓ Query successful, data verified"
+
+          # Test 5: Drop table and keyspace (cleanup)
+          echo "Test 5: Cleanup..."
+          kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra -- \
+            cqlsh -u "${{ steps.creds.outputs.cassandra_user }}" -p "${{ steps.creds.outputs.cassandra_pass }}" \
+            -e "DROP TABLE test_ks.test_table;"
+          kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra -- \
+            cqlsh -u "${{ steps.creds.outputs.cassandra_user }}" -p "${{ steps.creds.outputs.cassandra_pass }}" \
+            -e "DROP KEYSPACE test_ks;"
+          echo "✓ Cleanup complete"
+
+          echo "=== All CQL smoke tests passed ==="
+
+      # Phase 5: AxonOps agent verification
+      - name: Verify AxonOps agent process
+        run: |
+          echo "=== Verifying AxonOps agent ==="
+          POD_NAME="${{ env.CLUSTER_NAME }}-dc1-default-sts-0"
+
+          # Check agent process is running
+          echo "Checking for AxonOps agent process..."
+          if ! kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra -- ps aux | grep -i "[a]xon-agent"; then
+            echo "WARNING: AxonOps agent process not found"
+            echo "All processes:"
+            kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra -- ps aux
+          else
+            echo "✓ AxonOps agent process running"
+          fi
+
+      - name: Check AxonOps agent logs
+        run: |
+          echo "=== Checking AxonOps agent logs ==="
+          POD_NAME="${{ env.CLUSTER_NAME }}-dc1-default-sts-0"
+
+          echo "Container logs (looking for AxonOps agent):"
+          kubectl logs -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra --tail=100 | grep -i axon || echo "No AxonOps logs found in last 100 lines"
+
+          echo ""
+          echo "Full AxonOps agent log grep:"
+          kubectl logs -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra | grep -i "axon" | tail -20 || echo "No AxonOps logs found"
+
+      - name: Verify AxonOps configuration
+        run: |
+          echo "=== Verifying AxonOps environment variables ==="
+          POD_NAME="${{ env.CLUSTER_NAME }}-dc1-default-sts-0"
+
+          echo "Checking environment variables in pod..."
+          kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra -- env | grep AXON || echo "No AXON environment variables found"
+
+      # Cleanup
+      - name: Collect debug logs on failure
+        if: failure()
+        run: |
+          echo "=== Collecting debug information ==="
+
+          echo "Cluster info:"
+          kubectl cluster-info || true
+
+          echo ""
+          echo "All pods:"
+          kubectl get pods -A || true
+
+          echo ""
+          echo "K8ssandraCluster status:"
+          kubectl get k8ssandracluster -n ${{ env.NAMESPACE }} -o yaml || true
+
+          echo ""
+          echo "Cassandra pod describe:"
+          kubectl describe pod ${{ env.CLUSTER_NAME }}-dc1-default-sts-0 -n ${{ env.NAMESPACE }} || true
+
+          echo ""
+          echo "Cassandra pod logs:"
+          kubectl logs ${{ env.CLUSTER_NAME }}-dc1-default-sts-0 -n ${{ env.NAMESPACE }} -c cassandra --tail=200 || true
+
+      - name: Cleanup resources
+        if: always()
+        run: |
+          echo "=== Cleaning up resources ==="
+          kubectl delete k8ssandracluster ${{ env.CLUSTER_NAME }} -n ${{ env.NAMESPACE }} --wait=false || true
+          kubectl delete namespace ${{ env.NAMESPACE }} --wait=false || true
+          echo "✓ Cleanup initiated"
