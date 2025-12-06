@@ -18,9 +18,8 @@ env:
 jobs:
   e2e-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
-      # Phase 1: Setup k3s cluster
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -30,143 +29,56 @@ jobs:
           # Extract version from container image (e.g., 5.0.6-1.0.3 -> 5-0-6-1-0-3)
           IMAGE_TAG=$(echo "${{ inputs.container_image }}" | sed 's/.*://; s/\./-/g')
           CLUSTER_NAME="github-ci-${IMAGE_TAG}-${{ github.run_id }}"
+          POD_NAME="${CLUSTER_NAME}-dc1-default-sts-0"
           echo "cluster_name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
+          echo "pod_name=${POD_NAME}" >> $GITHUB_OUTPUT
           echo "Cluster name: ${CLUSTER_NAME}"
+          echo "Pod name: ${POD_NAME}"
 
+      # Phase 1: Setup k3s cluster
       - name: Setup k3s cluster
-        uses: AbsaOSS/k3d-action@v2
+        uses: ./.github/actions/k8ssandra-setup-k3s
         with:
-          cluster-name: test-cluster
-          args: >-
-            --agents 1
-            --no-lb
-            --k3s-arg "--disable=traefik,servicelb@server:*"
-
-      - name: Verify k3s cluster
-        run: |
-          echo "=== Verifying k3s cluster ==="
-          kubectl cluster-info
-          kubectl get nodes
-          kubectl version --short
+          cluster_name: e2e-test
 
       # Phase 2: Install K8ssandra operator
-      - name: Install cert-manager
-        run: |
-          echo "=== Installing cert-manager ==="
-          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.3/cert-manager.yaml
-
-          echo "Waiting for cert-manager to be ready..."
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
-
-          echo "✓ cert-manager ready"
-
       - name: Install K8ssandra operator
-        run: |
-          echo "=== Installing K8ssandra operator ==="
-
-          helm repo add k8ssandra https://helm.k8ssandra.io/stable
-          helm repo update
-
-          helm install k8ssandra-operator k8ssandra/k8ssandra-operator \
-            -n ${{ env.NAMESPACE }} \
-            --create-namespace \
-            --wait \
-            --timeout 5m
-
-          echo "✓ K8ssandra operator installed"
-
-      - name: Verify K8ssandra operator
-        run: |
-          echo "=== Verifying K8ssandra operator ==="
-          kubectl get pods -n ${{ env.NAMESPACE }}
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=k8ssandra-operator -n ${{ env.NAMESPACE }} --timeout=300s
-          echo "✓ K8ssandra operator ready"
+        uses: ./.github/actions/k8ssandra-install-operator
+        with:
+          namespace: ${{ env.NAMESPACE }}
 
       # Phase 3: Deploy K8ssandraCluster with AxonOps
-      - name: Create K8ssandraCluster manifest
-        run: |
-          echo "=== Creating K8ssandraCluster manifest ==="
-          cat <<EOF > k8ssandra-cluster.yaml
-          apiVersion: k8ssandra.io/v1alpha1
-          kind: K8ssandraCluster
-          metadata:
-            name: ${{ steps.cluster.outputs.cluster_name }}
-            namespace: ${{ env.NAMESPACE }}
-          spec:
-            cassandra:
-              serverVersion: "${{ inputs.cassandra_version }}"
-              serverImage: "${{ inputs.container_image }}"
-              datacenters:
-                - metadata:
-                    name: dc1
-                  size: 1
-                  resources:
-                    requests:
-                      cpu: 500m
-                      memory: 1Gi
-                    limits:
-                      cpu: 1000m
-                      memory: 2Gi
-                  storageConfig:
-                    cassandraDataVolumeClaimSpec:
-                      accessModes:
-                        - ReadWriteOnce
-                      resources:
-                        requests:
-                          storage: 1Gi
-                  config:
-                    jvmOptions:
-                      heap:
-                        initial: 512M
-                        max: 512M
-                  podTemplateSpec:
-                    spec:
-                      containers:
-                        - name: cassandra
-                          env:
-                            - name: AXON_AGENT_KEY
-                              value: "${{ secrets.AXONOPS_AGENT_KEY }}"
-                            - name: AXON_AGENT_ORG
-                              value: "${{ vars.AXONOPS_AGENT_ORG }}"
-                            - name: AXON_AGENT_HOST
-                              value: "${{ vars.AXONOPS_SERVER }}"
-          EOF
-
-          echo "Manifest created:"
-          cat k8ssandra-cluster.yaml
-
       - name: Deploy K8ssandraCluster
-        run: |
-          echo "=== Deploying K8ssandraCluster ==="
-          kubectl apply -f k8ssandra-cluster.yaml
+        uses: ./.github/actions/k8ssandra-deploy-cluster
+        with:
+          cluster_name: ${{ steps.cluster.outputs.cluster_name }}
+          namespace: ${{ env.NAMESPACE }}
+          container_image: ${{ inputs.container_image }}
+          cassandra_version: ${{ inputs.cassandra_version }}
+          axon_agent_key: ${{ secrets.AXONOPS_AGENT_KEY }}
+          axon_agent_org: ${{ vars.AXONOPS_AGENT_ORG }}
+          axon_agent_host: ${{ vars.AXONOPS_SERVER }}
 
-          echo "Waiting for Cassandra pod to be created..."
-          sleep 10
-          kubectl get pods -n ${{ env.NAMESPACE }}
+      # Phase 4: Verify cluster is fully functional BEFORE any other tests
+      - name: Verify Management API
+        uses: ./.github/actions/k8ssandra-k3s-test-management-api
+        with:
+          pod_name: ${{ steps.cluster.outputs.pod_name }}
+          namespace: ${{ env.NAMESPACE }}
 
-      - name: Wait for Cassandra to be ready
-        run: |
-          echo "=== Waiting for Cassandra to be ready ==="
+      - name: Verify AxonOps agent
+        uses: ./.github/actions/k8ssandra-k3s-verify-axonops
+        with:
+          pod_name: ${{ steps.cluster.outputs.pod_name }}
+          namespace: ${{ env.NAMESPACE }}
 
-          # Wait for pod to exist
-          for i in {1..60}; do
-            if kubectl get pod ${{ steps.cluster.outputs.cluster_name }}-dc1-default-sts-0 -n ${{ env.NAMESPACE }} 2>/dev/null; then
-              echo "Pod exists"
-              break
-            fi
-            echo "Waiting for pod to be created... ($i/60)"
-            sleep 5
-          done
+      - name: Test cqlai
+        uses: ./.github/actions/k8ssandra-k3s-test-cqlai
+        with:
+          pod_name: ${{ steps.cluster.outputs.pod_name }}
+          namespace: ${{ env.NAMESPACE }}
 
-          # Wait for pod to be ready (Cassandra startup can take 5-10 minutes)
-          echo "Waiting for pod to be ready (this may take 5-10 minutes)..."
-          kubectl wait --for=condition=ready pod/${{ steps.cluster.outputs.cluster_name }}-dc1-default-sts-0 \
-            -n ${{ env.NAMESPACE }} \
-            --timeout=600s
-
-          echo "✓ Cassandra pod ready"
-
-      # Phase 4: CQL smoke tests
+      # Phase 5: CQL smoke tests (only after cluster verified)
       - name: Get Cassandra credentials
         id: creds
         run: |
@@ -189,10 +101,10 @@ jobs:
           echo "cassandra_pass=$CASS_PASS" >> $GITHUB_OUTPUT
           echo "✓ Credentials retrieved"
 
-      - name: Run CQL smoke tests
+      - name: Run CQL smoke tests with authentication
         run: |
           echo "=== Running CQL smoke tests ==="
-          POD_NAME="${{ steps.cluster.outputs.cluster_name }}-dc1-default-sts-0"
+          POD_NAME="${{ steps.cluster.outputs.pod_name }}"
 
           # Test 1: Create keyspace
           echo "Test 1: Creating keyspace..."
@@ -239,41 +151,11 @@ jobs:
 
           echo "=== All CQL smoke tests passed ==="
 
-      # Phase 5: AxonOps agent verification
-      - name: Verify AxonOps agent process
-        run: |
-          echo "=== Verifying AxonOps agent ==="
-          POD_NAME="${{ steps.cluster.outputs.cluster_name }}-dc1-default-sts-0"
-
-          # Check agent process is running
-          echo "Checking for AxonOps agent process..."
-          if ! kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra -- ps aux | grep -i "[a]xon-agent"; then
-            echo "WARNING: AxonOps agent process not found"
-            echo "All processes:"
-            kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra -- ps aux
-          else
-            echo "✓ AxonOps agent process running"
-          fi
-
-      - name: Check AxonOps agent logs
-        run: |
-          echo "=== Checking AxonOps agent logs ==="
-          POD_NAME="${{ steps.cluster.outputs.cluster_name }}-dc1-default-sts-0"
-
-          echo "Container logs (looking for AxonOps agent):"
-          kubectl logs -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra --tail=100 | grep -i axon || echo "No AxonOps logs found in last 100 lines"
-
-          echo ""
-          echo "Full AxonOps agent log grep:"
-          kubectl logs -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra | grep -i "axon" | tail -20 || echo "No AxonOps logs found"
-
-      - name: Verify AxonOps configuration
-        run: |
-          echo "=== Verifying AxonOps environment variables ==="
-          POD_NAME="${{ steps.cluster.outputs.cluster_name }}-dc1-default-sts-0"
-
-          echo "Checking environment variables in pod..."
-          kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra -- env | grep AXON || echo "No AXON environment variables found"
+      # Future: Phase 6 - AxonOps SaaS API tests
+      # - Query AxonOps SaaS API to verify cluster registered
+      # - Trigger repair via AxonOps API
+      # - Trigger backup via AxonOps API
+      # - Query metrics from AxonOps SaaS
 
       # Cleanup
       - name: Collect debug logs on failure
@@ -294,11 +176,11 @@ jobs:
 
           echo ""
           echo "Cassandra pod describe:"
-          kubectl describe pod ${{ steps.cluster.outputs.cluster_name }}-dc1-default-sts-0 -n ${{ env.NAMESPACE }} || true
+          kubectl describe pod ${{ steps.cluster.outputs.pod_name }} -n ${{ env.NAMESPACE }} || true
 
           echo ""
           echo "Cassandra pod logs:"
-          kubectl logs ${{ steps.cluster.outputs.cluster_name }}-dc1-default-sts-0 -n ${{ env.NAMESPACE }} -c cassandra --tail=200 || true
+          kubectl logs ${{ steps.cluster.outputs.pod_name }} -n ${{ env.NAMESPACE }} -c cassandra --tail=500 || true
 
       - name: Cleanup resources
         if: always()
