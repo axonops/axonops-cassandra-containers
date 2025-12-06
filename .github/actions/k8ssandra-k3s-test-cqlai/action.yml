@@ -16,8 +16,25 @@ runs:
       shell: bash
       run: |
         echo "Checking cqlai installation..."
-        kubectl exec -n ${{ inputs.namespace }} ${{ inputs.pod_name }} -c cassandra -- cqlai --version
-        echo "cqlai is installed"
+
+        # Retry kubectl exec in case pod is transitioning
+        RETRIES=0
+        MAX_RETRIES=5
+        while [ $RETRIES -lt $MAX_RETRIES ]; do
+          if kubectl exec -n ${{ inputs.namespace }} ${{ inputs.pod_name }} -c cassandra -- cqlai --version 2>/dev/null; then
+            echo "cqlai is installed"
+            break
+          fi
+
+          RETRIES=$((RETRIES + 1))
+          if [ $RETRIES -lt $MAX_RETRIES ]; then
+            echo "kubectl exec failed, waiting 3s... (attempt $RETRIES/$MAX_RETRIES)"
+            sleep 3
+          else
+            echo "ERROR: Failed to connect to pod after $MAX_RETRIES attempts"
+            exit 1
+          fi
+        done
 
     - name: Test CQL operations with cqlai
       shell: bash
