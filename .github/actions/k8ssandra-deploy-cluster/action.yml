@@ -41,17 +41,30 @@ runs:
           cassandra:
             serverVersion: "${{ inputs.cassandra_version }}"
             serverImage: "${{ inputs.container_image }}"
+            resources:
+              requests:
+                cpu: 500m
+                memory: 2Gi
+              limits:
+                cpu: 1000m
+                memory: 3Gi
             datacenters:
               - metadata:
                   name: dc1
                 size: 1
-                resources:
-                  requests:
-                    cpu: 500m
-                    memory: 2Gi
-                  limits:
-                    cpu: 1000m
-                    memory: 3Gi
+                containers:
+                  - name: cassandra
+                    env:
+                      - name: AXON_AGENT_KEY
+                        value: "${{ inputs.axon_agent_key }}"
+                      - name: AXON_AGENT_ORG
+                        value: "${{ inputs.axon_agent_org }}"
+                      - name: AXON_AGENT_HOST
+                        value: "${{ inputs.axon_agent_host }}"
+                config:
+                  jvmOptions:
+                    heap_initial_size: 1G
+                    heap_max_size: 1G
                 storageConfig:
                   cassandraDataVolumeClaimSpec:
                     accessModes:
@@ -59,32 +72,16 @@ runs:
                     resources:
                       requests:
                         storage: 2Gi
-                config:
-                  jvmOptions:
-                    heap:
-                      initial: 1G
-                      max: 1G
-                podTemplateSpec:
-                  spec:
-                    containers:
-                      - name: cassandra
-                        env:
-                          - name: AXON_AGENT_KEY
-                            value: "${{ inputs.axon_agent_key }}"
-                          - name: AXON_AGENT_ORG
-                            value: "${{ inputs.axon_agent_org }}"
-                          - name: AXON_AGENT_HOST
-                            value: "${{ inputs.axon_agent_host }}"
-                    extraVolumes:
-                      pvcs:
-                        - name: axonops-data
-                          mountPath: /var/lib/axonops
-                          pvcSpec:
-                            accessModes:
-                              - ReadWriteOnce
-                            resources:
-                              requests:
-                                storage: 512Mi
+                extraVolumes:
+                  pvcs:
+                    - name: axonops-data
+                      mountPath: /var/lib/axonops
+                      pvcSpec:
+                        accessModes:
+                          - ReadWriteOnce
+                        resources:
+                          requests:
+                            storage: 512Mi
         EOF
 
         echo "Manifest created"
