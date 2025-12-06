@@ -16,7 +16,6 @@ runs:
         args: >-
           --agents 1
           --no-lb
-          --image rancher/k3s:v1.31.3-k3s1
           --k3s-arg "--disable=traefik,servicelb@server:*"
 
     - name: Verify k3s cluster
