@@ -23,6 +23,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup Helm cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/helm
+          key: helm-${{ runner.os }}-${{ hashFiles('**/Chart.yaml', '**/Chart.lock') }}
+          restore-keys: |
+            helm-${{ runner.os }}-
+
       - name: Generate cluster name
         id: cluster
         run: |
@@ -112,7 +120,7 @@ jobs:
           echo "Test 1: Creating keyspace..."
           kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -c cassandra -- \
             cqlsh -u "${{ steps.creds.outputs.cassandra_user }}" -p "${{ steps.creds.outputs.cassandra_pass }}" \
-            -e "CREATE KEYSPACE IF NOT EXISTS test_ks WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
+            -e "CREATE KEYSPACE IF NOT EXISTS test_ks WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};" 2>&1 | grep -v "Using a password on the command line"
           echo "✓ Keyspace created"
 
           # Test 2: Create table
