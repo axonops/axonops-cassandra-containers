@@ -63,6 +63,21 @@ axonops-cassandra-containers/
 - Filter `paths:` to avoid rebuilding unrelated images
 - Implement comprehensive test suite before publishing
 - Use GitHub Actions caching for Docker layers (`type=gha`)
+- **Use composite actions to avoid duplication** - Place logic in `.github/actions/<component>-*/` directories
+- **Name everything with component prefix** - Actions, workflows, jobs must use component name (e.g., `k8ssandra-*`)
+
+### Composite Actions
+- Store in `.github/actions/<component>-<action-name>/action.yml`
+- Naming convention: `<component>-<action-name>` (e.g., `k8ssandra-setup-k3s`, `k8ssandra-test-cqlai`)
+- Create separate actions for Docker vs Kubernetes contexts (e.g., `k8ssandra-test-cqlai` vs `k8ssandra-k3s-test-cqlai`)
+- Always include error handling and safe defaults
+- Document inputs clearly in action.yml
+
+### Caching Strategy
+- **Docker layers:** Use `cache-from: type=gha` and `cache-to: type=gha,mode=max` (auto-busting on code changes, 7-day retention)
+- **External dependencies (Helm, etc.):** Use date-based cache keys (e.g., `helm-${{ runner.os }}-$(date +%Y-%m-%d)`) for daily refresh
+- **Never cache indefinitely** - Always include version or date in cache key
+
 
 ### Publishing
 - Publish to GHCR: `ghcr.io/axonops/<image-name>:<tag>`
@@ -74,7 +89,7 @@ axonops-cassandra-containers/
 Every workflow must include:
 - Container build verification
 - Service health checks (liveness/readiness)
-- Functional tests (API endpoints, CQL operations, etc.)
+- Functional tests appropriate for the component
 - Process ownership verification (non-root)
 - Security scanning (Trivy)
 

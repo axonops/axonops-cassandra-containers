@@ -19,6 +19,7 @@ Docker containers for Apache Cassandra with integrated AxonOps monitoring and ma
 - [Scripts Reference](#scripts-reference)
 - [Examples](#examples)
 - [CI/CD Pipeline](#cicd-pipeline)
+- [Container Features](#container-features)
 - [Monitoring with AxonOps](#monitoring-with-axonops)
 - [Troubleshooting](#troubleshooting)
 - [Production Considerations](#production-considerations)
@@ -474,19 +475,35 @@ To use this example:
 
 ## CI/CD Pipeline
 
-### Automated Builds
+### Automated Builds and Testing
 
-The repository includes a GitHub Actions workflow that automatically builds and publishes Docker images.
+The repository includes comprehensive GitHub Actions workflows for building, testing, and publishing Docker images.
 
 **Workflows:**
-- Test: `.github/workflows/k8ssandra-build-and-test.yml`
-- Publish: `.github/workflows/k8ssandra-publish.yml` (manual)
+- **Build and Test:** `.github/workflows/k8ssandra-build-and-test.yml` - Docker build tests with full validation
+- **E2E Testing:** `.github/workflows/k8ssandra-e2e-test.yml` - End-to-end Kubernetes deployment testing
+- **Security Scanning:** `.github/workflows/k8ssandra-nightly-security-scan.yml` - Daily CVE scanning with email alerts
+- **Production Publish:** `.github/workflows/k8ssandra-publish.yml` - Manual production releases
+- **Development Publish:** `.github/workflows/development-k8ssandra-publish.yml` - Automatic development builds
 
-**Test Workflow Triggers:**
-- Push to `main` branch (with `k8ssandra/**` changes)
-- Pull requests to `main` (with `k8ssandra/**` changes)
+**Build and Test Workflow Triggers:**
+- Push to `development` or `main` branch (with `k8ssandra/**` changes)
+- Pull requests to `development` or `main` (with `k8ssandra/**` changes)
 
-**Publish Workflow:**
+**E2E Test Workflow:**
+- Manual trigger via GitHub Actions UI or `gh workflow run k8ssandra-e2e-test.yml`
+- Deploys containers into k3s cluster on GitHub Actions runner
+- Tests Management API, AxonOps agent, cqlai, and CQL operations
+- Validates AxonOps SaaS connectivity
+- Runtime: ~3-4 minutes
+
+**Security Scan Workflow:**
+- Scheduled: Daily at 2 AM UTC
+- Manual trigger via GitHub Actions UI
+- Scans all published versions for CVEs
+- Email notifications on detection of CRITICAL or HIGH severity issues
+
+**Publish Workflows:**
 - Manual trigger via GitHub Actions UI or `gh` CLI
 - Requires git tag and container version
 - See [RELEASE.md](./RELEASE.md) for detailed instructions
@@ -546,6 +563,62 @@ ghcr.io/axonops/axonops-cassandra-containers:latest                             
 
 **Total:** 14 tags (6 immutable + 6 patch-latest + 1 minor-latest + 1 global-latest)
 
+## Container Features
+
+### Startup Version Banner
+
+All containers display a comprehensive version banner on startup showing:
+- Container build version and git revision
+- Cassandra version
+- Java version
+- AxonOps agent versions (both standalone and Java agent)
+- cqlai version
+- jemalloc version
+- Operating system and platform
+- Runtime environment (Kubernetes detection, hostname)
+- AxonOps configuration status
+
+**View the banner:**
+```bash
+# Docker/Podman
+docker logs <container-name> | head -30
+
+# Kubernetes
+kubectl logs <pod-name> -n k8ssandra-operator -c cassandra | head -30
+```
+
+**Example output:**
+```
+================================================================================
+AxonOps K8ssandra Apache Cassandra 5.0.6 + AxonOps agent 2.0.11
+Container v1.0.3 (git: 307d28c)
+================================================================================
+
+Component Versions:
+  Cassandra:          5.0.6
+  Java:               17.0.17
+  AxonOps Agent:      AxonOps agent 2.0.11
+  AxonOps Java Agent: axon-cassandra5.0-agent-jdk17-1.0.12-1.noarch
+  cqlai:              cqlai version v0.0.31
+  jemalloc:           jemalloc-5.2.1-2.el9.x86_64
+  OS:                 Red Hat Enterprise Linux 9.7 (UBI - freely redistributable)
+  Platform:           x86_64
+
+Runtime Environment:
+  Hostname:           cassandra-pod-0
+  Kubernetes:         Yes
+    API Server:       10.43.0.1:443
+    Pod:              cassandra-pod-0
+
+AxonOps Configuration:
+  Server:             agents.axonops.cloud
+  Organization:       your-org
+  Agent Key:          ***configured***
+================================================================================
+```
+
+This banner makes debugging customer environments much easier by showing all relevant version information in one place.
+
 ## Monitoring with AxonOps
 
 Once deployed, your Cassandra cluster will automatically:
@@ -559,6 +632,19 @@ Access your cluster monitoring at:
 
 ## Troubleshooting
 
+### Checking Container Version
+
+View the startup banner to see all component versions:
+```bash
+# Kubernetes
+kubectl logs <pod-name> -n k8ssandra-operator -c cassandra | head -30
+
+# Docker/Podman
+docker logs <container-name> | head -30
+```
+
+The banner displays container version, git revision, and all component versions which helps identify exactly what's running.
+
 ### Agent Connection Issues
 
 Check agent logs:
@@ -570,6 +656,8 @@ Verify environment variables:
 ```bash
 kubectl describe pod <pod-name> -n k8ssandra-operator
 ```
+
+Check the startup banner shows AxonOps configuration is correct.
 
 ### Image Pull Errors
 
