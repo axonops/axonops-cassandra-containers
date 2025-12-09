@@ -1,0 +1,217 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "axon-cassandra.fullname" . }}
+  labels:
+    {{- include "axon-cassandra.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  serviceName: {{ include "axon-cassandra.fullname" . }}
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "axon-cassandra.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "axon-cassandra.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "axon-cassandra.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.envVars }}
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- toYaml .Values.envVars | nindent 12 }}
+          {{- end }}
+          {{- if .Values.envVarsSecret }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.envVarsSecret }}
+          {{- end }}
+          ports:
+            - name: cql
+              containerPort: {{ .Values.service.port | default 9042 }}
+              protocol: TCP
+            - name: jmx
+              containerPort: 7199
+              protocol: TCP
+            - name: intra-node
+              containerPort: 7000
+              protocol: TCP
+            - name: intra-node-tls
+              containerPort: 7001
+              protocol: TCP
+          {{- if .Values.customLivenessProbe }}
+          livenessProbe: {{- include "common.tplvalues.render" (dict "value" .Values.customLivenessProbe "context" $) | nindent 12 }}
+          {{- else if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  nodetool info | grep "Native Transport active: true"
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.customReadinessProbe }}
+          readinessProbe: {{- include "common.tplvalues.render" (dict "value" .Values.customReadinessProbe "context" $) | nindent 12 }}
+          {{- else if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  nodetool status | grep -E "^UN\\s+${POD_IP}"
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            {{- if or (not .Values.persistence.data.existingClaim) (not .Values.persistence.data) }}
+            - name: data
+              mountPath: {{ .Values.persistence.data.mountPath | default "/var/lib/cassandra" }}
+            {{- else if .Values.persistence.data.existingClaim }}
+            - name: data-existing
+              mountPath: {{ .Values.persistence.data.mountPath | default "/var/lib/cassandra" }}
+            {{- end }}
+            {{- if and .Values.persistence.commitlog.enabled (or (not .Values.persistence.commitlog.existingClaim) (not .Values.persistence.commitlog)) }}
+            - name: commitlog
+              mountPath: {{ .Values.persistence.commitlog.mountPath | default "/var/lib/cassandra/commitlog" }}
+            {{- else if and .Values.persistence.commitlog.enabled .Values.persistence.commitlog.existingClaim }}
+            - name: commitlog-existing
+              mountPath: {{ .Values.persistence.commitlog.mountPath | default "/var/lib/cassandra/commitlog" }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        {{- if .Values.persistence.data.existingClaim }}
+        - name: data-existing
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.data.existingClaim }}
+        {{- end }}
+        {{- if and .Values.persistence.commitlog.enabled .Values.persistence.commitlog.existingClaim }}
+        - name: commitlog-existing
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.commitlog.existingClaim }}
+        {{- end }}
+        {{- else }}
+        # Persistence is disabled, using emptyDir
+        - name: data
+          emptyDir: {}
+        {{- if .Values.persistence.commitlog.enabled }}
+        - name: commitlog
+          emptyDir: {}
+        {{- end }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    {{- if not .Values.persistence.data.existingClaim }}
+    - metadata:
+        name: data
+        labels:
+          {{- include "axon-cassandra.labels" . | nindent 10 }}
+        {{- with .Values.persistence.data.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          - {{ .Values.persistence.data.accessMode | default "ReadWriteOnce" }}
+        {{- if .Values.persistence.data.storageClass }}
+        {{- if (eq "-" .Values.persistence.data.storageClass) }}
+        storageClassName: ""
+        {{- else }}
+        storageClassName: {{ .Values.persistence.data.storageClass }}
+        {{- end }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.data.size | default "10Gi" }}
+    {{- end }}
+    {{- if and .Values.persistence.commitlog.enabled (not .Values.persistence.commitlog.existingClaim) }}
+    - metadata:
+        name: commitlog
+        labels:
+          {{- include "axon-cassandra.labels" . | nindent 10 }}
+        {{- with .Values.persistence.commitlog.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          - {{ .Values.persistence.commitlog.accessMode | default "ReadWriteOnce" }}
+        {{- if .Values.persistence.commitlog.storageClass }}
+        {{- if (eq "-" .Values.persistence.commitlog.storageClass) }}
+        storageClassName: ""
+        {{- else }}
+        storageClassName: {{ .Values.persistence.commitlog.storageClass }}
+        {{- end }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.commitlog.size | default "5Gi" }}
+    {{- end }}
+  {{- end }}

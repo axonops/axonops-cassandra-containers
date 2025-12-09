@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "axon-cassandra.fullname" . }}
+  labels:
+    {{- include "axon-cassandra.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port | default 9042 }}
+      targetPort: cql
+      protocol: TCP
+      name: cql
+    - port: 7199
+      targetPort: jmx
+      protocol: TCP
+      name: jmx
+  selector:
+    {{- include "axon-cassandra.selectorLabels" . | nindent 4 }}
