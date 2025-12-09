@@ -888,7 +888,7 @@ Built by: GitHub Actions
 Component Versions:
   Cassandra:          5.0.6
   k8ssandra API:      0.1.110
-  Java:               17.0.17
+  Java:               OpenJDK Runtime Environment (Red_Hat-17.0.17.0.10-1) (build 17.0.17+10-LTS)
   AxonOps Agent:      2.0.11
   AxonOps Java Agent: axon-cassandra5.0-agent-jdk17-1.0.12-1.noarch
   cqlai:              v0.0.31
