@@ -66,17 +66,25 @@ RUN groupadd --gid 9988 axonops && \
     touch /var/run/utmp && \
     microdnf clean all
 
-# Install cqlai (latest release)
-ARG GITHUB_TOKEN
-RUN RPM_ARCH=$([ "$TARGETARCH" = "amd64" ] && echo "x86_64" || echo "aarch64") && \
-    if [ -n "$GITHUB_TOKEN" ]; then \
-      AUTH_HEADER="Authorization: token $GITHUB_TOKEN"; \
-    else \
-      AUTH_HEADER=""; \
+# Install cqlai (pinned version - must be provided as build arg)
+ARG CQLAI_VERSION
+RUN if [ -z "$CQLAI_VERSION" ]; then \
+      echo "ERROR: CQLAI_VERSION build arg is required"; \
+      exit 1; \
     fi && \
-    CQLAI_VERSION=$(curl -s --retry 3 --retry-delay 2 ${AUTH_HEADER:+-H "$AUTH_HEADER"} https://api.github.com/repos/axonops/cqlai/releases/latest | grep '"tag_name"' | sed 's/.*"v\([^"]*\)".*/\1/') && \
-    if [ -z "$CQLAI_VERSION" ]; then echo "ERROR: Failed to fetch cqlai version" && exit 1; fi && \
-    rpm -i https://github.com/axonops/cqlai/releases/download/v${CQLAI_VERSION}/cqlai-${CQLAI_VERSION}-1.${RPM_ARCH}.rpm && \
+    echo "Installing cqlai version: $CQLAI_VERSION" && \
+    RPM_ARCH=$([ "$TARGETARCH" = "amd64" ] && echo "x86_64" || echo "aarch64") && \
+    CQLAI_RPM="cqlai-${CQLAI_VERSION}-1.${RPM_ARCH}.rpm" && \
+    CQLAI_URL="https://github.com/axonops/cqlai/releases/download/v${CQLAI_VERSION}" && \
+    # Download checksums file and RPM
+    curl -sL -o SHA256SUMS.txt "${CQLAI_URL}/SHA256SUMS.txt" && \
+    curl -sL -o "${CQLAI_RPM}" "${CQLAI_URL}/${CQLAI_RPM}" && \
+    # Verify checksum
+    grep "${CQLAI_RPM}" SHA256SUMS.txt | sha256sum -c - && \
+    # Install RPM
+    rpm -i "${CQLAI_RPM}" && \
+    # Cleanup
+    rm -f "${CQLAI_RPM}" SHA256SUMS.txt && \
     rm -rf /var/tmp/rpm-* /var/cache/yum /var/cache/dnf
 
 # Write build information to file for runtime access (after all packages installed)
