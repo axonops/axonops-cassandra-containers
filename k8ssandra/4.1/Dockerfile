@@ -68,8 +68,14 @@ RUN groupadd --gid 9988 axonops && \
     rm -rf /var/cache/yum /var/cache/dnf
 
 # Install cqlai (latest release)
+ARG GITHUB_TOKEN
 RUN RPM_ARCH=$([ "$TARGETARCH" = "amd64" ] && echo "x86_64" || echo "aarch64") && \
-    CQLAI_VERSION=$(curl -s --retry 3 --retry-delay 2 https://api.github.com/repos/axonops/cqlai/releases/latest | grep '"tag_name"' | sed 's/.*"v\([^"]*\)".*/\1/') && \
+    if [ -n "$GITHUB_TOKEN" ]; then \
+      AUTH_HEADER="Authorization: token $GITHUB_TOKEN"; \
+    else \
+      AUTH_HEADER=""; \
+    fi && \
+    CQLAI_VERSION=$(curl -s --retry 3 --retry-delay 2 ${AUTH_HEADER:+-H "$AUTH_HEADER"} https://api.github.com/repos/axonops/cqlai/releases/latest | grep '"tag_name"' | sed 's/.*"v\([^"]*\)".*/\1/') && \
     if [ -z "$CQLAI_VERSION" ]; then echo "ERROR: Failed to fetch cqlai version" && exit 1; fi && \
     rpm -i https://github.com/axonops/cqlai/releases/download/v${CQLAI_VERSION}/cqlai-${CQLAI_VERSION}-1.${RPM_ARCH}.rpm && \
     rm -rf /var/tmp/rpm-* /var/cache/yum /var/cache/dnf
