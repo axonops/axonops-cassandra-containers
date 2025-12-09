@@ -35,6 +35,7 @@ print_startup_banner() {
 
     # Supply chain verification (digests for security audit)
     echo "Supply Chain Security:"
+    echo "  Base image:         k8ssandra/cass-management-api:${CASSANDRA_VERSION:-unknown}-ubi-v${K8SSANDRA_API_VERSION:-unknown}"
     echo "  Base image digest:  ${K8SSANDRA_BASE_DIGEST:-unknown}"
     echo ""
 
