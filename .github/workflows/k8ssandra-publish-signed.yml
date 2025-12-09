@@ -383,8 +383,9 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ env.IMAGE_NAME }}:${{ matrix.cassandra_version }}-${{ inputs.container_version }}
-            ghcr.io/${{ env.IMAGE_NAME }}:${{ matrix.cassandra_version }}-latest
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ matrix.cassandra_version }}-v${{ steps.k8ssandra.outputs.k8ssandra_api_version }}-${{ inputs.container_version }}
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ matrix.cassandra_version }}-v${{ steps.k8ssandra.outputs.k8ssandra_api_version }}
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ matrix.cassandra_version }}
             ${{ steps.version.outputs.is_minor_latest == 'true' && format('ghcr.io/{0}:{1}-latest', env.IMAGE_NAME, steps.version.outputs.base_version) || '' }}
             ${{ steps.version.outputs.is_global_latest == 'true' && format('ghcr.io/{0}:latest', env.IMAGE_NAME) || '' }}
           build-args: |
