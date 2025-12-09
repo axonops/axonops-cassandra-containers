@@ -15,6 +15,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: axonops/k8ssandra/cassandra
+  ALL_VERSIONS: "5.0.1 5.0.2 5.0.3 5.0.4 5.0.5 5.0.6"
 
 jobs:
   k8ssandra-validate:
@@ -223,11 +224,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract base version
+      - name: Determine latest version
         id: version
-        run: |
-          BASE_VERSION=$(echo "${{ matrix.cassandra_version }}" | cut -d. -f1,2)
-          echo "base_version=${BASE_VERSION}" >> $GITHUB_OUTPUT
+        uses: ./.github/actions/k8ssandra-determine-latest
+        with:
+          current_version: ${{ matrix.cassandra_version }}
+          all_versions: ${{ env.ALL_VERSIONS }}
 
       - name: Build and push Docker image
         id: build
@@ -240,8 +242,8 @@ jobs:
           tags: |
             ghcr.io/${{ env.IMAGE_NAME }}:${{ matrix.cassandra_version }}-${{ inputs.container_version }}
             ghcr.io/${{ env.IMAGE_NAME }}:${{ matrix.cassandra_version }}-latest
-            ${{ matrix.cassandra_version == '5.0.6' && format('ghcr.io/{0}:5.0-latest', env.IMAGE_NAME) || '' }}
-            ${{ matrix.cassandra_version == '5.0.6' && format('ghcr.io/{0}:latest', env.IMAGE_NAME) || '' }}
+            ${{ steps.version.outputs.is_minor_latest == 'true' && format('ghcr.io/{0}:{1}-latest', env.IMAGE_NAME, steps.version.outputs.base_version) || '' }}
+            ${{ steps.version.outputs.is_global_latest == 'true' && format('ghcr.io/{0}:latest', env.IMAGE_NAME) || '' }}
           build-args: |
             CASSANDRA_VERSION=${{ matrix.cassandra_version }}
             MAJOR_VERSION=${{ steps.version.outputs.base_version }}
@@ -266,8 +268,8 @@ jobs:
           tags: |
             ghcr.io/${{ env.IMAGE_NAME }}:${{ matrix.cassandra_version }}-${{ inputs.container_version }}
             ghcr.io/${{ env.IMAGE_NAME }}:${{ matrix.cassandra_version }}-latest
-            ${{ matrix.cassandra_version == '5.0.6' && format('ghcr.io/{0}:5.0-latest', env.IMAGE_NAME) || '' }}
-            ${{ matrix.cassandra_version == '5.0.6' && format('ghcr.io/{0}:latest', env.IMAGE_NAME) || '' }}
+            ${{ steps.version.outputs.is_minor_latest == 'true' && format('ghcr.io/{0}:{1}-latest', env.IMAGE_NAME, steps.version.outputs.base_version) || '' }}
+            ${{ steps.version.outputs.is_global_latest == 'true' && format('ghcr.io/{0}:latest', env.IMAGE_NAME) || '' }}
           build-args: |
             CASSANDRA_VERSION=${{ matrix.cassandra_version }}
             MAJOR_VERSION=${{ steps.version.outputs.base_version }}
