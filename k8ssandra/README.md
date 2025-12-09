@@ -114,7 +114,7 @@ Run a single-node Cassandra instance locally:
 
 ```bash
 # Pull the image
-docker pull ghcr.io/axonops/axonops-cassandra-containers:5.0.6-1.0.0
+docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0
 
 # Run with AxonOps agent (replace with your credentials)
 docker run -d --name cassandra \
@@ -123,7 +123,7 @@ docker run -d --name cassandra \
   -e AXON_AGENT_HOST="agents.axonops.cloud" \
   -p 9042:9042 \
   -p 8080:8080 \
-  ghcr.io/axonops/axonops-cassandra-containers:5.0.6-1.0.0
+  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0
 
 # Wait for Cassandra to be ready (check Management API)
 curl http://localhost:8080/api/v0/probes/readiness
@@ -137,7 +137,7 @@ docker exec -it cassandra cqlai
 For Kubernetes deployments, use the image with K8ssandra Operator:
 
 ```bash
-export IMAGE_NAME="ghcr.io/axonops/axonops-cassandra-containers:5.0.6-1.0.0"
+export IMAGE_NAME="ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0"
 export AXON_AGENT_KEY="your-key"
 export AXON_AGENT_ORG="your-org"
 export AXON_AGENT_HOST="agents.axonops.cloud"
@@ -560,10 +560,10 @@ For complete release instructions, see [RELEASE.md](./RELEASE.md)
 Each release uses multi-dimensional tagging:
 
 ```
-ghcr.io/axonops/axonops-cassandra-containers:{CASSANDRA_VERSION}-{AXONOPS_VERSION}  # Immutable
-ghcr.io/axonops/axonops-cassandra-containers:{CASSANDRA_VERSION}-latest             # Patch-level latest
-ghcr.io/axonops/axonops-cassandra-containers:5.0-latest                             # Minor-level latest
-ghcr.io/axonops/axonops-cassandra-containers:latest                                 # Global latest
+ghcr.io/axonops/k8ssandra/cassandra:{CASSANDRA_VERSION}-{AXONOPS_VERSION}  # Immutable
+ghcr.io/axonops/k8ssandra/cassandra:{CASSANDRA_VERSION}-latest             # Patch-level latest
+ghcr.io/axonops/k8ssandra/cassandra:5.0-latest                             # Minor-level latest
+ghcr.io/axonops/k8ssandra/cassandra:latest                                 # Global latest
 ```
 
 **Example:** For AxonOps release `1.0.1`, a total of 14 tags published:

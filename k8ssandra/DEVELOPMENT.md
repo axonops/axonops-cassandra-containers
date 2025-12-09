@@ -111,7 +111,7 @@ See [RELEASE.md](./RELEASE.md) for complete instructions.
 - Manual only (development branch)
 
 **Published to:**
-- `ghcr.io/axonops/development-axonops-cassandra-containers:<version>-<tag>`
+- `ghcr.io/axonops/development/k8ssandra/cassandra:<version>-<tag>`
 
 **Use for:**
 - Testing containers before promoting to production

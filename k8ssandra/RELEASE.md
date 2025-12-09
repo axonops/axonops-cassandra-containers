@@ -65,13 +65,13 @@ gh workflow run development-k8ssandra-publish.yml \
 ```
 
 **Images published to:**
-- `ghcr.io/axonops/development-axonops-cassandra-containers:5.0.6-dev-1.0.0`
-- `ghcr.io/axonops/development-axonops-cassandra-containers:5.0.5-dev-1.0.0`
-- `ghcr.io/axonops/development-axonops-cassandra-containers:5.0.4-dev-1.0.0`
+- `ghcr.io/axonops/development/k8ssandra/cassandra:5.0.6-dev-1.0.0`
+- `ghcr.io/axonops/development/k8ssandra/cassandra:5.0.5-dev-1.0.0`
+- `ghcr.io/axonops/development/k8ssandra/cassandra:5.0.4-dev-1.0.0`
 
 **Testing development images:**
 ```bash
-docker pull ghcr.io/axonops/development-axonops-cassandra-containers:5.0.6-dev-1.0.0
+docker pull ghcr.io/axonops/development/k8ssandra/cassandra:5.0.6-dev-1.0.0
 # Run tests, validate functionality
 ```
 
@@ -169,7 +169,7 @@ The publish workflow performs these steps:
 
 5. **Publish** - Pushes images to GHCR
    - Tags: `5.0.6-1.0.0`, `5.0.5-1.0.0`, `5.0.4-1.0.0`
-   - Registry: `ghcr.io/axonops/axonops-cassandra-containers`
+   - Registry: `ghcr.io/axonops/k8ssandra/cassandra`
 
 6. **Create Release** - Creates GitHub Release
    - Name: `k8ssandra-<container_version>` (e.g., `k8ssandra-1.0.0`)
@@ -185,13 +185,13 @@ gh api /orgs/axonops/packages/container/axonops-cassandra-containers/versions | 
   jq '.[] | select(.metadata.container.tags[] | contains("1.0.0"))'
 
 # Pull and test an image
-docker pull ghcr.io/axonops/axonops-cassandra-containers:5.0.6-1.0.0
+docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0
 docker run -d \
   -e AXON_AGENT_KEY=your-key \
   -e AXON_AGENT_ORG=your-org \
   -e AXON_AGENT_HOST=agents.axonops.cloud \
   -p 9042:9042 \
-  ghcr.io/axonops/axonops-cassandra-containers:5.0.6-1.0.0
+  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0
 ```
 
 Check GitHub Release:
@@ -238,9 +238,9 @@ This becomes the container version for all published images:
 Each release publishes:
 
 ### Container Images (GHCR)
-- `ghcr.io/axonops/axonops-cassandra-containers:5.0.6-<container_version>`
-- `ghcr.io/axonops/axonops-cassandra-containers:5.0.5-<container_version>`
-- `ghcr.io/axonops/axonops-cassandra-containers:5.0.4-<container_version>`
+- `ghcr.io/axonops/k8ssandra/cassandra:5.0.6-<container_version>`
+- `ghcr.io/axonops/k8ssandra/cassandra:5.0.5-<container_version>`
+- `ghcr.io/axonops/k8ssandra/cassandra:5.0.4-<container_version>`
 
 All images are multi-arch: `linux/amd64`, `linux/arm64`
 
