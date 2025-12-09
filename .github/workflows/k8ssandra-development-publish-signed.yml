@@ -41,6 +41,19 @@ jobs:
           BASE_VERSION=$(echo "${{ matrix.cassandra_version }}" | cut -d. -f1,2)
           echo "base_version=${BASE_VERSION}" >> $GITHUB_OUTPUT
 
+      - name: Get k8ssandra base image digest
+        id: base_digest
+        run: |
+          DIGEST=$(echo '${{ vars.K8SSANDRA_BASE_DIGESTS }}' | jq -r '.["${{ matrix.cassandra_version }}"]')
+          if [ "$DIGEST" = "null" ] || [ -z "$DIGEST" ]; then
+            echo "ERROR: No digest found for Cassandra version ${{ matrix.cassandra_version }}"
+            echo "Available versions:"
+            echo '${{ vars.K8SSANDRA_BASE_DIGESTS }}' | jq -r 'keys[]'
+            exit 1
+          fi
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+          echo "✓ Using k8ssandra base digest: $DIGEST for version ${{ matrix.cassandra_version }}"
+
       - name: Build image for testing
         uses: docker/build-push-action@v5
         with:
@@ -52,6 +65,7 @@ jobs:
           build-args: |
             CASSANDRA_VERSION=${{ matrix.cassandra_version }}
             MAJOR_VERSION=${{ steps.version.outputs.base_version }}
+            K8SSANDRA_BASE_DIGEST=${{ steps.base_digest.outputs.digest }}
             BUILD_DATE=${{ github.event.repository.updated_at }}
             VCS_REF=${{ github.sha }}
             VERSION=${{ inputs.container_version }}
@@ -180,6 +194,7 @@ jobs:
           build-args: |
             CASSANDRA_VERSION=${{ matrix.cassandra_version }}
             MAJOR_VERSION=${{ steps.version.outputs.base_version }}
+            K8SSANDRA_BASE_DIGEST=${{ steps.base_digest.outputs.digest }}
             BUILD_DATE=${{ github.event.repository.updated_at }}
             VCS_REF=${{ github.sha }}
             VERSION=${{ inputs.container_version }}
@@ -207,6 +222,7 @@ jobs:
           build-args: |
             CASSANDRA_VERSION=${{ matrix.cassandra_version }}
             MAJOR_VERSION=${{ steps.version.outputs.base_version }}
+            K8SSANDRA_BASE_DIGEST=${{ steps.base_digest.outputs.digest }}
             BUILD_DATE=${{ github.event.repository.updated_at }}
             VCS_REF=${{ github.sha }}
             VERSION=${{ inputs.container_version }}

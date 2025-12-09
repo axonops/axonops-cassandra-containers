@@ -255,12 +255,25 @@ docker push your-registry/axonops-cassandra:5.0.6
 **Required build arguments:**
 - `CASSANDRA_VERSION` - Full Cassandra version (e.g., 5.0.6)
 - `MAJOR_VERSION` - Major.minor version matching the directory (e.g., 5.0)
+- `K8SSANDRA_BASE_DIGEST` - SHA256 digest of k8ssandra base image (supply chain security)
 - `CQLAI_VERSION` - Version of cqlai to install (see [latest release](https://github.com/axonops/cqlai/releases))
 
 **Optional build arguments:**
 - `BUILD_DATE` - Build timestamp (default: current time)
 - `VCS_REF` - Git commit SHA (default: current commit)
 - `VERSION` - Container version label (default: dev)
+
+**Supply Chain Security:**
+
+Our containers extend from `k8ssandra/cass-management-api` base images. For supply chain security, we pin base images by digest (immutable) rather than tags. The `K8SSANDRA_BASE_DIGEST` maps Cassandra versions to verified image digests, preventing supply chain attacks where upstream images could be replaced maliciously.
+
+Digest mapping for 5.0.x versions:
+- 5.0.1: `sha256:51d2e8e6696ea37faf652c5bb33a8f8db9f9c565348a2161989ad8f0a9369fd9`
+- 5.0.2: `sha256:688f31162586238bd9e40ca698dcb9819a7b26baaa939f2758b844a73337155b`
+- 5.0.3: `sha256:dff75f5164bd49dd2ceaf6ba6a957eabacb13bd56b401a98c174633de94435cb`
+- 5.0.4: `sha256:553a5aa3170c3462a51e253fecd80260366a119bb298248482811a7b2d774b56`
+- 5.0.5: `sha256:801f14e369fbc90797bacbc755d5539f56506c30da5de005aedecabc0ca358bd`
+- 5.0.6: `sha256:aa2de19866f3487abe0dff65e6b74f5a68c6c5a7d211b5b7a3e0b961603ba5af`
 
 ## Deploying to Kubernetes
 

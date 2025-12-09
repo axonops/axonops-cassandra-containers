@@ -1,7 +1,8 @@
 ARG CASSANDRA_VERSION=5.0
-FROM docker.io/k8ssandra/cass-management-api:${CASSANDRA_VERSION}-ubi
+ARG K8SSANDRA_BASE_DIGEST
+FROM docker.io/k8ssandra/cass-management-api@${K8SSANDRA_BASE_DIGEST}
 
-RUN echo "AXONOPS_BUILD: Inheriting from k8ssandra/cass-management-api:${CASSANDRA_VERSION}-ubi"
+RUN echo "AXONOPS_BUILD: Inheriting from k8ssandra/cass-management-api:${CASSANDRA_VERSION}-ubi (digest: ${K8SSANDRA_BASE_DIGEST})"
 
 # Build arguments for OCI labels
 ARG BUILD_DATE
@@ -30,6 +31,7 @@ LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.title="AxonOps K8ssandra Apache Cassandra ${CASSANDRA_VERSION}"
 LABEL org.opencontainers.image.description="Docker container combining Apache Cassandra ${CASSANDRA_VERSION}, K8ssandra Management API, AxonOps Agent for monitoring and management, and cqlai modern CQL shell. Optimized for Kubernetes deployments with jemalloc memory optimization."
 LABEL org.opencontainers.image.base.name="docker.io/k8ssandra/cass-management-api:${CASSANDRA_VERSION}-ubi"
+LABEL org.opencontainers.image.base.digest="${K8SSANDRA_BASE_DIGEST}"
 
 ENV AXON_AGENT_LOG_OUTPUT=std
 ARG MAJOR_VERSION=5.0

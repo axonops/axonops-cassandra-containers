@@ -19,10 +19,19 @@ runs:
       run: |
         echo "=== Verifying base image version in build ==="
 
+        # Get the k8ssandra base image digest for this version
+        DIGEST=$(echo '${{ vars.K8SSANDRA_BASE_DIGESTS }}' | jq -r '.["${{ inputs.cassandra_version }}"]')
+        if [ "$DIGEST" = "null" ] || [ -z "$DIGEST" ]; then
+          echo "ERROR: No digest found for Cassandra version ${{ inputs.cassandra_version }}"
+          exit 1
+        fi
+        echo "Using k8ssandra base digest: $DIGEST"
+
         # Rebuild with output to capture logs
         docker build \
           --build-arg CASSANDRA_VERSION=${{ inputs.cassandra_version }} \
           --build-arg MAJOR_VERSION=${{ inputs.base_version }} \
+          --build-arg K8SSANDRA_BASE_DIGEST=$DIGEST \
           --build-arg CQLAI_VERSION=${{ inputs.cqlai_version }} \
           -t axonops-cassandra:verify \
           ./k8ssandra/${{ inputs.base_version }} 2>&1 | tee /tmp/build-output.log
