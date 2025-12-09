@@ -422,7 +422,7 @@ The workflow will:
 gh release view k8ssandra-1.0.0
 
 # Pull and test image
-docker pull ghcr.io/axonops/axonops-cassandra-containers:5.0.6-1.0.0
+docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0
 ```
 
 ### Component Release Documentation

@@ -181,7 +181,7 @@ Check that images were published:
 
 ```bash
 # Check GHCR for published images
-gh api /orgs/axonops/packages/container/axonops-cassandra-containers/versions | \
+gh api /orgs/axonops/packages/container/k8ssandra%2Fcassandra/versions | \
   jq '.[] | select(.metadata.container.tags[] | contains("1.0.0"))'
 
 # Pull and test an image
