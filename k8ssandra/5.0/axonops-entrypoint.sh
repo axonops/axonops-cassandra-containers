@@ -44,7 +44,7 @@ print_startup_banner() {
     # Component versions (from build-info.txt)
     echo "Component Versions:"
     echo "  Cassandra:          ${CASSANDRA_VERSION:-unknown}"
-    echo "  k8ssandra API:      v${K8SSANDRA_API_VERSION:-unknown}"
+    echo "  k8ssandra API:      ${K8SSANDRA_API_VERSION:-unknown}"
     echo "  Java:               ${JAVA_VERSION:-unknown}"
     echo "  AxonOps Agent:      ${AXON_AGENT_VERSION:-unknown}"
     echo "  AxonOps Java Agent: ${AXON_JAVA_AGENT_VERSION:-unknown}"
