@@ -875,35 +875,48 @@ docker logs <container-name> | head -30
 kubectl logs <pod-name> -n k8ssandra-operator -c cassandra | head -30
 ```
 
-**Example output:**
+**Example output (production release):**
 ```
 ================================================================================
-AxonOps K8ssandra Apache Cassandra 5.0.6 + AxonOps agent 2.0.11
-Container v1.0.3 (git: 307d28c)
+AxonOps K8ssandra Apache Cassandra 5.0.6
+Image: ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.0
+Built: 2025-12-09T14:40:13Z
+Release: https://github.com/axonops/axonops-containers/releases/tag/1.0.0
+Built by: GitHub Actions
 ================================================================================
 
 Component Versions:
   Cassandra:          5.0.6
+  k8ssandra API:      v0.1.110
   Java:               17.0.17
   AxonOps Agent:      AxonOps agent 2.0.11
   AxonOps Java Agent: axon-cassandra5.0-agent-jdk17-1.0.12-1.noarch
   cqlai:              cqlai version v0.0.31
   jemalloc:           jemalloc-5.2.1-2.el9.x86_64
-  OS:                 Red Hat Enterprise Linux 9.7 (UBI - freely redistributable)
+  OS:                 Red Hat Enterprise Linux 9.7 (Plow) (UBI - Universal Base Image, freely redistributable)
   Platform:           x86_64
 
+Supply Chain Security:
+  Base image:         k8ssandra/cass-management-api:5.0.6-ubi-v0.1.110
+  Base image digest:  sha256:aa2de19866f3487abe0dff65e6b74f5a68c6c5a7d211b5b7a3e0b961603ba5af
+
 Runtime Environment:
-  Hostname:           cassandra-pod-0
+  Hostname:           demo-dc1-default-sts-0
   Kubernetes:         Yes
     API Server:       10.43.0.1:443
-    Pod:              cassandra-pod-0
+    Pod:              demo-dc1-default-sts-0
 
 AxonOps Configuration:
   Server:             agents.axonops.cloud
-  Organization:       your-org
+  Organization:       my-org
   Agent Key:          ***configured***
+
+================================================================================
+Starting Cassandra with Management API and AxonOps Agent...
 ================================================================================
 ```
+
+**Production builds** include additional metadata: `Image`, `Release` link, and `Built by` fields. **Development builds** show only the essential fields (`Built` timestamp).
 
 This banner makes debugging customer environments much easier by showing all relevant version information in one place.
 
