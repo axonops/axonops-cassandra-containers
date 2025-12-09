@@ -41,8 +41,15 @@ LABEL org.opencontainers.image.vendor="AxonOps"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.title="AxonOps K8ssandra Apache Cassandra ${CASSANDRA_VERSION}"
 LABEL org.opencontainers.image.description="Apache Cassandra ${CASSANDRA_VERSION} with k8ssandra Management API v${K8SSANDRA_API_VERSION}, AxonOps monitoring agents, cqlai v${CQLAI_VERSION}, and jemalloc memory optimization. Base: k8ssandra/cass-management-api:${CASSANDRA_VERSION}-ubi-v${K8SSANDRA_API_VERSION}@${K8SSANDRA_BASE_DIGEST}. Optimized for Kubernetes with K8ssandra Operator."
+LABEL org.opencontainers.image.ref.name="${IMAGE_FULL_NAME}"
 LABEL org.opencontainers.image.base.name="docker.io/k8ssandra/cass-management-api:${CASSANDRA_VERSION}-ubi-v${K8SSANDRA_API_VERSION}"
 LABEL org.opencontainers.image.base.digest="${K8SSANDRA_BASE_DIGEST}"
+
+# AxonOps-specific labels (com.axonops.* namespace)
+LABEL com.axonops.cassandra.version="${CASSANDRA_VERSION}"
+LABEL com.axonops.k8ssandra-api.version="${K8SSANDRA_API_VERSION}"
+LABEL com.axonops.cqlai.version="${CQLAI_VERSION}"
+LABEL com.axonops.build.actor="${GITHUB_ACTOR}"
 
 ENV AXON_AGENT_LOG_OUTPUT=std
 ARG MAJOR_VERSION=4.1
