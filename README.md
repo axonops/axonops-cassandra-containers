@@ -15,14 +15,17 @@ Container build definitions and CI/CD pipelines for AxonOps container images.
   - [CVE Policy](#cve-policy)
   - [Gold Standard Security Deployment](#gold-standard-security-deployment)
 - [Development](#development)
+  - [Container Security Standards](#container-security-standards-all-components)
 - [Releasing](#releasing)
   - [Development Publishing](#development-publishing)
   - [Production Publishing](#production-publishing)
+  - [Component Release Documentation](#component-release-documentation)
 - [Acknowledgements](#acknowledgements)
   - [Apache Cassandra](#apache-cassandra)
   - [K8ssandra](#k8ssandra)
 - [License](#license)
 - [Legal Notices](#legal-notices)
+  - [Trademarks](#trademarks)
 
 ## Components
 
@@ -59,7 +62,7 @@ Each component has its own documentation with detailed instructions:
 - **NOT recommended for production** - use specific versions instead
 
 **Production Deployment:**
-- Always pin to specific immutable versions (e.g., `5.0.6-1.0.4`)
+- Always pin to specific immutable versions (e.g., `5.0.6-v0.1.110-1.0.5`)
 - Never use `latest`, `5.0-latest`, or `{version}-latest` tags in production
 - Review release notes before upgrading
 - Test upgrades in non-production environments first
@@ -83,7 +86,7 @@ Instead of using tags (which can be mutable), deploy using the image's SHA256 di
 
 ```yaml
 # Tag-based (good)
-image: ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4
+image: ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5
 
 # Digest-based (best)
 image: ghcr.io/axonops/k8ssandra/cassandra@sha256:412c85225...
@@ -111,10 +114,10 @@ image: ghcr.io/axonops/k8ssandra/cassandra@sha256:412c85225...
 **Method 2: Using Docker/Podman**
 ```bash
 # Pull the image first
-docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4
+docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5
 
 # Get digest
-docker inspect ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4 \
+docker inspect ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5 \
   --format='{{index .RepoDigests 0}}'
 
 # Output: ghcr.io/axonops/k8ssandra/cassandra@sha256:412c85225...
@@ -158,10 +161,10 @@ brew install sigstore/tap/cosign  # macOS
 cosign verify \
   --certificate-identity-regexp='https://github.com/axonops/axonops-containers' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
-  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4
+  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5
 
 # Check signature exists
-cosign tree ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4
+cosign tree ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5
 ```
 
 **Troubleshooting (macOS Issues):**
@@ -173,13 +176,13 @@ If you encounter issues with local cosign on macOS, use the official Cosign cont
 docker run --rm gcr.io/projectsigstore/cosign:v2.4.1 verify \
   --certificate-identity-regexp='https://github.com/axonops/axonops-containers' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
-  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4
+  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5
 
 # Using Podman
 podman run --rm gcr.io/projectsigstore/cosign:v2.4.1 verify \
   --certificate-identity-regexp='https://github.com/axonops/axonops-containers' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
-  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4
+  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5
 ```
 
 This uses the [official Cosign container](https://github.com/sigstore/cosign) and works reliably across all platforms.
@@ -246,10 +249,10 @@ For detailed setup, see your Kubernetes distribution's documentation on admissio
 **Updating Digests:**
 ```bash
 # 1. Pull new version
-docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.5
+docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5
 
 # 2. Get new digest
-NEW_DIGEST=$(docker inspect ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.5 \
+NEW_DIGEST=$(docker inspect ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5 \
   --format='{{index .RepoDigests 0}}' | cut -d@ -f2)
 
 # 3. Update manifest
@@ -279,17 +282,56 @@ git add . && git commit -S -m "Add feature" && git push origin development
 # For production: create PR development → main (approval required)
 ```
 
+### Container Security Standards (ALL Components)
+
+**Every container we build MUST follow these security practices:**
+
+1. **Digest Pinning (Supply Chain Security)**
+   - **ALWAYS** pin base images by SHA256 digest, NEVER by tag
+   - Tags are mutable - can be replaced maliciously
+   - Digests are immutable - cryptographically guaranteed
+   - Example:
+     ```dockerfile
+     # CORRECT
+     FROM upstream/image@sha256:abc123...
+
+     # WRONG - Supply chain vulnerability!
+     FROM upstream/image:latest
+     FROM upstream/image:v1.0.0
+     ```
+
+2. **Container Signing (Authenticity)**
+   - **ALL** published images MUST be signed with Cosign
+   - Use keyless signing with GitHub OIDC (no secret management)
+   - Sign by digest immediately after build
+   - Publish to `ghcr.io/axonops/<component>/<image-name>:tag`
+
+3. **Verification & Testing**
+   - Verify checksums for downloaded artifacts (RPMs, tarballs, etc.)
+   - Verify base image digest matches expected version
+   - Automated startup error detection
+   - Security scanning with Trivy before publishing
+
+**Why these standards matter:**
+- Prevents supply chain attacks (malicious base images)
+- Ensures image authenticity (Cosign signatures)
+- Provides full audit trail (digests + signatures)
+- Meets compliance requirements for regulated environments
+
 ## Releasing
 
 ### Development Publishing
 
-**Purpose:** Publish images to development registry for testing before production release.
+**Purpose:** Publish signed images to development registry for testing before production release.
 
-**Registry:** `ghcr.io/axonops/development-<image-name>`
+**Registry:** `ghcr.io/axonops/development/<component>/<image-name>`
+
+**Example:** `ghcr.io/axonops/development/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.0`
 
 **Characteristics:**
-- Images can be overwritten (no version validation)
-- Allows iterative testing with same tag
+- All images are Cosign signed (same as production)
+- Uses same security standards as production (digest pinning, checksums, verification)
+- Allows testing with specific versions
 - No GitHub Releases created
 - Tagged from `development` branch
 
@@ -384,7 +426,7 @@ gh workflow run <component>-publish-signed.yml \
 
 **Arguments explained:**
 - `-f main_git_tag=1.0.0` - The git tag on main branch to checkout and build (the tag you created in Step 1)
-- `-f container_version=1.0.0` - The container version for GHCR images (e.g., creates `5.0.6-1.0.0`)
+- `-f container_version=1.0.0` - The container version for GHCR images (e.g., creates `5.0.6-v0.1.110-1.0.5`)
 
 **Note:** Use the `-signed` workflows (`k8ssandra-publish-signed.yml`) for new releases. These publish to the new image paths with cryptographic signatures. Old workflows remain for backward compatibility but are deprecated.
 
@@ -403,7 +445,7 @@ gh run watch
      - This determines which code to build
    - **container_version**: Enter the container version (e.g., `1.0.0`)
      - This becomes the container version on published images
-     - Example: `5.0.6-1.0.0` where `1.0.0` is the container version
+     - Example: `5.0.6-v0.1.110-1.0.5` where `1.0.0` is the container version
 5. Click **Run workflow** to start
 
 **Step 3: Workflow Execution**
@@ -428,16 +470,16 @@ The signed publish workflow will:
 gh release view k8ssandra-signed-1.0.0
 
 # Pull and test image
-docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0
+docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5
 
 # Verify signature
 cosign verify \
   --certificate-identity-regexp='https://github.com/axonops/axonops-containers' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
-  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0
+  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5
 
 # Or check signature exists
-cosign tree ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0
+cosign tree ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5
 ```
 
 All production images are cryptographically signed. Signature verification proves the image was built by official workflows and has not been tampered with. See [Gold Standard Security Deployment](#gold-standard-security-deployment) for more details.

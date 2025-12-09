@@ -22,9 +22,34 @@ axonops-cassandra-containers/
 ## Container Image Conventions
 
 ### Base Images
+
+**Supply Chain Security - CRITICAL:**
+- **ALWAYS** pin base images by digest (@sha256:...), NEVER by tag
+- Tags are mutable and can be replaced maliciously (supply chain attack)
+- Digests are immutable and cryptographically verified
+- Document both the version tag AND digest in code/docs for clarity
+
+**Example (CORRECT):**
+```dockerfile
+ARG BASE_DIGEST=sha256:aa2de19866f3487abe0dff65e6b74f5a68c6c5a7d211b5b7a3e0b961603ba5af
+FROM docker.io/k8ssandra/cass-management-api@${BASE_DIGEST}
+# Comment: This is k8ssandra/cass-management-api:5.0.6-ubi-v0.1.110
+```
+
+**Example (WRONG - Supply Chain Vulnerability!):**
+```dockerfile
+FROM docker.io/k8ssandra/cass-management-api:5.0.6-ubi  # ❌ Mutable tag!
+```
+
+**Why this matters:**
+- Attacker could replace upstream image with malicious version
+- Same tag, different content = silent compromise
+- Digest pinning prevents this attack vector
+
+**Additional requirements:**
 - Use official upstream images where possible (Docker Hub official images)
 - Document base image source in component README
-- Pin base image versions explicitly
+- Store digest mappings in repository variables for maintainability
 
 ### Multi-Architecture Support
 - All images must support: `linux/amd64`, `linux/arm64`
@@ -56,7 +81,7 @@ axonops-cassandra-containers/
 - All workflows live at `.github/workflows/` (top-level only)
 - Name workflows clearly:
   - Test workflow: `<component>-build-and-test.yml`
-  - Publish workflow: `<component>-publish.yml`
+  - Publish workflow: `<component>-publish-signed.yml`
 
 ### Structure
 - Use matrix builds to avoid duplication
@@ -81,7 +106,7 @@ axonops-cassandra-containers/
 
 ### Publishing
 - Publish to GHCR: `ghcr.io/axonops/<image-name>:<tag>`
-- Tag format: `<version>-<release>` (e.g., `5.0.6-1.0.0`)
+- Tag format: `{CASS}-v{K8S_API}-{AXON}` (e.g., `5.0.6-v0.1.110-1.0.5`)
 - Multi-arch manifests required for all published images
 - Only publish on version tags (semantic versioning)
 
@@ -130,12 +155,12 @@ Every workflow must include:
 - Production-ready code only
 - Protected: requires PR approval, no direct pushes
 - Only accepts merges from `development` branch
-- Releases published to: `ghcr.io/axonops/axonops-cassandra-containers`
+- Releases published to: `ghcr.io/axonops/<component>/<image-name>` (e.g., `ghcr.io/axonops/k8ssandra/cassandra`)
 
 **`development` - Integration Branch**
 - Default branch for all development work
 - Developers commit directly (no PR required)
-- Releases published to: `ghcr.io/axonops/development-axonops-cassandra-containers`
+- Releases published to: `ghcr.io/axonops/development/<component>/<image-name>` (e.g., `ghcr.io/axonops/development/k8ssandra/cassandra`)
 - Testing ground before promoting to production
 
 **`feature/<name>` - Feature Branches (Optional)**
@@ -254,22 +279,23 @@ Each component should have three workflows:
 - Runs: Full test suite
 - Does NOT publish to GHCR
 
-**2. `development-<component>-publish.yml`** (Development Publishing)
+**2. `<component>-development-publish-signed.yml`** (Development Publishing - Signed)
 - Trigger: Manual (`workflow_dispatch`)
 - Inputs: `dev_git_tag`, `container_version`
 - Validates: Tag is on development branch
 - Runs: Full test suite on tagged code
-- Publishes: Multi-arch images to `ghcr.io/axonops/development-<image-name>`
-- No version validation (allows overwrites for iterative testing)
+- Publishes: Multi-arch images to `ghcr.io/axonops/development/<component>/<image-name>`
+- Signs: All images with Cosign (keyless)
 - Does NOT create GitHub Releases
 
-**3. `<component>-publish.yml`** (Production Publishing)
+**3. `<component>-publish-signed.yml`** (Production Publishing - Signed)
 - Trigger: Manual (`workflow_dispatch`)
 - Inputs: `main_git_tag`, `container_version`
-- Validates: Tag is on main branch, container version doesn't exist in GHCR
+- Validates: Tag is on main branch
 - Runs: Full test suite on tagged code
-- Publishes: Multi-arch images to `ghcr.io/axonops/<image-name>`
-- Creates: GitHub Release named `<component>-<container_version>`
+- Publishes: Multi-arch images to `ghcr.io/axonops/<component>/<image-name>`
+- Signs: All images with Cosign (keyless)
+- Creates: DRAFT GitHub Release named `<component>-<container_version>` with component versions
 
 ### Development Release (Testing)
 
@@ -285,20 +311,20 @@ Publish development images for testing before production release:
 
 2. **Trigger development publish workflow**
    ```bash
-   gh workflow run development-<component>-publish.yml \
+   gh workflow run <component>-development-publish-signed.yml \
      -f dev_git_tag=dev-1.0.0 \
      -f container_version=dev-1.0.0
    ```
 
 3. **Images published to development registry**
-   - Registry: `ghcr.io/axonops/development-<image-name>`
-   - Example: `ghcr.io/axonops/development-axonops-cassandra-containers:5.0.6-dev-1.0.0`
+   - Registry: `ghcr.io/axonops/development/<component>/<image-name>`
+   - Example: `ghcr.io/axonops/development/k8ssandra/cassandra:5.0.6-v0.1.110-dev-1.0.0`
    - Can be overwritten (no version validation)
    - No GitHub Release created
 
 4. **Test development images**
    ```bash
-   docker pull ghcr.io/axonops/development-<image>:<version>-dev-1.0.0
+   docker pull ghcr.io/axonops/development/<component>/<image>:<version>-v<k8s-api>-dev-1.0.0
    # Run tests, validate functionality
    ```
 
@@ -338,7 +364,7 @@ When development images are tested and ready for production:
 
    **GitHub CLI:**
    ```bash
-   gh workflow run <component>-publish.yml \
+   gh workflow run <component>-publish-signed.yml \
      -f main_git_tag=1.0.0 \
      -f container_version=1.0.0
    ```

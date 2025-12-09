@@ -56,6 +56,31 @@ jobs:
           BASE_VERSION=$(echo "${{ matrix.cassandra_version }}" | cut -d. -f1,2)
           echo "base_version=${BASE_VERSION}" >> $GITHUB_OUTPUT
 
+      - name: Parse k8ssandra version and digest
+        id: k8ssandra
+        run: |
+          # Find the composite key for this Cassandra version in K8SSANDRA_VERSIONS
+          COMPOSITE_KEY=$(echo '${{ vars.K8SSANDRA_VERSIONS }}' | jq -r 'keys[] | select(startswith("${{ matrix.cassandra_version }}+"))')
+
+          if [ -z "$COMPOSITE_KEY" ]; then
+            echo "ERROR: No k8ssandra version found for Cassandra ${{ matrix.cassandra_version }}"
+            echo "Available versions:"
+            echo '${{ vars.K8SSANDRA_VERSIONS }}' | jq -r 'keys[]'
+            exit 1
+          fi
+
+          # Extract k8ssandra API version from composite key (e.g., "5.0.6+0.1.110" -> "0.1.110")
+          K8S_API_VERSION=$(echo "$COMPOSITE_KEY" | cut -d+ -f2)
+
+          # Get digest for this composite key
+          DIGEST=$(echo '${{ vars.K8SSANDRA_VERSIONS }}' | jq -r '.["'"$COMPOSITE_KEY"'"]')
+
+          echo "k8ssandra_api_version=$K8S_API_VERSION" >> $GITHUB_OUTPUT
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+          echo "✓ Cassandra: ${{ matrix.cassandra_version }}"
+          echo "✓ k8ssandra API: v$K8S_API_VERSION"
+          echo "✓ Base digest: $DIGEST"
+
       - name: Build image for testing
         id: build
         uses: docker/build-push-action@v5
@@ -68,9 +93,12 @@ jobs:
           build-args: |
             CASSANDRA_VERSION=${{ matrix.cassandra_version }}
             MAJOR_VERSION=${{ steps.version.outputs.base_version }}
+            K8SSANDRA_BASE_DIGEST=${{ steps.k8ssandra.outputs.digest }}
+            K8SSANDRA_API_VERSION=${{ steps.k8ssandra.outputs.k8ssandra_api_version }}
             BUILD_DATE=${{ github.event.repository.updated_at }}
             VCS_REF=${{ github.sha }}
             VERSION=test
+            CQLAI_VERSION=${{ vars.K8SSANDRA_CQLAI_VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -79,9 +107,16 @@ jobs:
         with:
           cassandra_version: ${{ matrix.cassandra_version }}
           base_version: ${{ steps.version.outputs.base_version }}
+          cqlai_version: ${{ vars.K8SSANDRA_CQLAI_VERSION }}
+          k8ssandra_digests_json: ${{ vars.K8SSANDRA_VERSIONS }}
 
       - name: Start container and wait for services
         uses: ./.github/actions/k8ssandra-start-and-wait
+        with:
+          container_name: cassandra-test
+
+      - name: Verify no startup errors
+        uses: ./.github/actions/k8ssandra-verify-no-startup-errors
         with:
           container_name: cassandra-test
 
@@ -95,6 +130,12 @@ jobs:
         uses: ./.github/actions/k8ssandra-test-management-api
         with:
           container_name: cassandra-test
+
+      - name: Verify Management API version
+        uses: ./.github/actions/k8ssandra-verify-mgmt-api-version
+        with:
+          container_name: cassandra-test
+          expected_api_version: ${{ steps.k8ssandra.outputs.k8ssandra_api_version }}
 
       - name: Verify AxonOps
         uses: ./.github/actions/k8ssandra-verify-axonops
@@ -169,6 +210,31 @@ jobs:
           BASE_VERSION=$(echo "${{ matrix.cassandra_version }}" | cut -d. -f1,2)
           echo "base_version=${BASE_VERSION}" >> $GITHUB_OUTPUT
 
+      - name: Parse k8ssandra version and digest
+        id: k8ssandra
+        run: |
+          # Find the composite key for this Cassandra version in K8SSANDRA_VERSIONS
+          COMPOSITE_KEY=$(echo '${{ vars.K8SSANDRA_VERSIONS }}' | jq -r 'keys[] | select(startswith("${{ matrix.cassandra_version }}+"))')
+
+          if [ -z "$COMPOSITE_KEY" ]; then
+            echo "ERROR: No k8ssandra version found for Cassandra ${{ matrix.cassandra_version }}"
+            echo "Available versions:"
+            echo '${{ vars.K8SSANDRA_VERSIONS }}' | jq -r 'keys[]'
+            exit 1
+          fi
+
+          # Extract k8ssandra API version from composite key (e.g., "5.0.6+0.1.110" -> "0.1.110")
+          K8S_API_VERSION=$(echo "$COMPOSITE_KEY" | cut -d+ -f2)
+
+          # Get digest for this composite key
+          DIGEST=$(echo '${{ vars.K8SSANDRA_VERSIONS }}' | jq -r '.["'"$COMPOSITE_KEY"'"]')
+
+          echo "k8ssandra_api_version=$K8S_API_VERSION" >> $GITHUB_OUTPUT
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+          echo "✓ Cassandra: ${{ matrix.cassandra_version }}"
+          echo "✓ k8ssandra API: v$K8S_API_VERSION"
+          echo "✓ Base digest: $DIGEST"
+
       - name: Build image for testing
         id: build
         uses: docker/build-push-action@v5
@@ -181,9 +247,12 @@ jobs:
           build-args: |
             CASSANDRA_VERSION=${{ matrix.cassandra_version }}
             MAJOR_VERSION=${{ steps.version.outputs.base_version }}
+            K8SSANDRA_BASE_DIGEST=${{ steps.k8ssandra.outputs.digest }}
+            K8SSANDRA_API_VERSION=${{ steps.k8ssandra.outputs.k8ssandra_api_version }}
             BUILD_DATE=${{ github.event.repository.updated_at }}
             VCS_REF=${{ github.sha }}
             VERSION=test
+            CQLAI_VERSION=${{ vars.K8SSANDRA_CQLAI_VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -192,9 +261,16 @@ jobs:
         with:
           cassandra_version: ${{ matrix.cassandra_version }}
           base_version: ${{ steps.version.outputs.base_version }}
+          cqlai_version: ${{ vars.K8SSANDRA_CQLAI_VERSION }}
+          k8ssandra_digests_json: ${{ vars.K8SSANDRA_VERSIONS }}
 
       - name: Start container and wait for services
         uses: ./.github/actions/k8ssandra-start-and-wait
+        with:
+          container_name: cassandra-test
+
+      - name: Verify no startup errors
+        uses: ./.github/actions/k8ssandra-verify-no-startup-errors
         with:
           container_name: cassandra-test
 
@@ -208,6 +284,12 @@ jobs:
         uses: ./.github/actions/k8ssandra-test-management-api
         with:
           container_name: cassandra-test
+
+      - name: Verify Management API version
+        uses: ./.github/actions/k8ssandra-verify-mgmt-api-version
+        with:
+          container_name: cassandra-test
+          expected_api_version: ${{ steps.k8ssandra.outputs.k8ssandra_api_version }}
 
       - name: Verify AxonOps
         uses: ./.github/actions/k8ssandra-verify-axonops

@@ -8,20 +8,40 @@ Docker containers for Apache Cassandra with integrated AxonOps monitoring and ma
 
 - [Overview](#overview)
 - [Pre-built Docker Images](#pre-built-docker-images)
+  - [Available Images](#available-images)
+  - [Supported Cassandra Versions](#supported-cassandra-versions)
 - [Production Best Practice](#-production-best-practice)
 - [Quick Start with Docker/Podman](#quick-start-with-dockerpodman)
+  - [Using with Kubernetes](#using-with-kubernetes-k8ssandra)
 - [Prerequisites](#prerequisites)
-- [Supported Cassandra Versions](#supported-cassandra-versions)
 - [Getting Started](#getting-started)
 - [Building Docker Images](#building-docker-images)
+  - [Adding Support for New Cassandra Versions](#adding-support-for-new-cassandra-versions)
+  - [Updating for New k8ssandra Management API Versions](#updating-for-new-k8ssandra-management-api-versions)
 - [Deploying to Kubernetes](#deploying-to-kubernetes)
+  - [Using the Example Configuration](#using-the-example-configuration)
+  - [Verifying the Deployment](#verifying-the-deployment)
+  - [Connecting to the Cluster](#connecting-to-the-cluster)
+  - [Key Configuration Options](#key-configuration-options)
 - [Configuration](#configuration)
+  - [AxonOps Agent Configuration](#axonops-agent-configuration)
+  - [Container Environment Variables](#container-environment-variables)
 - [Scripts Reference](#scripts-reference)
+  - [scripts/install_k8ssandra.sh](#scriptsinstall_k8ssandrash)
+  - [scripts/rebuild.sh](#scriptsrebuildsh)
 - [Examples](#examples)
+  - [examples/axon-cluster.yml](#examplesaxon-clusteryml)
+  - [Customizing the Example](#customizing-the-example)
 - [CI/CD Pipeline](#cicd-pipeline)
+  - [Automated Builds and Testing](#automated-builds-and-testing)
 - [Container Features](#container-features)
+  - [Startup Version Banner](#startup-version-banner)
 - [Monitoring with AxonOps](#monitoring-with-axonops)
 - [Troubleshooting](#troubleshooting)
+  - [Checking Container Version](#checking-container-version)
+  - [Agent Connection Issues](#agent-connection-issues)
+  - [Image Pull Errors](#image-pull-errors)
+  - [Cluster Not Starting](#cluster-not-starting)
 - [Production Considerations](#production-considerations)
 
 ## Overview
@@ -42,23 +62,30 @@ Pre-built images are available from GitHub Container Registry (GHCR). This is th
 
 ### Available Images
 
-Images use a multi-dimensional tagging strategy for flexibility:
+Images use a 3-dimensional tagging strategy with k8ssandra API version tracking:
 
 | Tag Pattern | Example | Description | Use Case |
 |-------------|---------|-------------|----------|
-| `{CASSANDRA_VERSION}-{AXONOPS_VERSION}` | `5.0.6-1.0.4` | Immutable, specific version | **Production**: Pin exact versions for auditability |
+| `{CASS}-v{K8S_API}-{AXON}` | `5.0.6-v0.1.110-1.0.0` | Fully immutable (all 3 versions) | **Production**: Pin exact versions for complete auditability |
 | `@sha256:<digest>` | `@sha256:412c852...` | Digest-based (immutable) | **Highest Security**: Cryptographically guaranteed image (see [Gold Standard Security](../README.md#gold-standard-security-deployment)) |
-| `{CASSANDRA_VERSION}-latest` | `5.0.6-latest` | Latest AxonOps version for this Cassandra patch | Track AxonOps updates for a specific Cassandra patch |
-| `{CASSANDRA_MINOR}-latest` | `5.0-latest` | Latest patch in this Cassandra minor line | Track latest Cassandra patch in a major version (currently 5.0.6) |
-| `latest` | `latest` | Latest across all versions | Quick trials and documentation (currently 5.0.6) |
+| `{CASS}-v{K8S_API}` | `5.0.6-v0.1.110` | Latest AxonOps for this Cassandra + k8ssandra combo | Track AxonOps updates for specific Cassandra + k8ssandra versions |
+| `{CASS}` | `5.0.6` | Latest k8ssandra API + AxonOps for this Cassandra minor | Track k8ssandra + AxonOps updates for a Cassandra minor |
+| `{MAJOR}-latest` | `5.0-latest` | Latest minor in Cassandra major 5.0 | Track latest Cassandra 5.0.x minor + components |
+| `latest` | `latest` | Latest across all Cassandra majors | Quick trials (migrates to 5.1, 5.2, 6.0 when released) |
+
+**Versioning Dimensions:**
+- **CASS** - Cassandra version (e.g., 5.0.6)
+- **K8S_API** - k8ssandra Management API version (e.g., v0.1.110)
+- **AXON** - AxonOps container version (e.g., 1.0.0, SemVer)
 
 **Tagging Examples:**
 
-When version `5.0.6-1.0.1` is built, it gets tagged as:
-- `5.0.6-1.0.1` (immutable)
-- `5.0.6-latest` (retag)
-- `5.0-latest` (retag, because 5.0.6 is the highest 5.0.x patch)
-- `latest` (retag, because 5.0.6 is the highest overall version)
+When `5.0.6-v0.1.110-1.0.0` is built (and it's the latest of everything):
+- `5.0.6-v0.1.110-1.0.0` (immutable - never changes)
+- `5.0.6-v0.1.110` (floating - retags to newer AxonOps builds)
+- `5.0.6` (floating - retags when k8ssandra API or AxonOps updates)
+- `5.0-latest` (floating - retags when newer 5.0.x minor released, e.g., 5.0.7)
+- `latest` (floating - **moves to 5.1, 5.2, 6.0 when new Cassandra major released**)
 
 ### Supported Cassandra Versions
 
@@ -90,11 +117,11 @@ Browse all available tags: [GitHub Container Registry](https://github.com/axonop
 
 2. **🥈 Immutable Tag** (Production Standard)
    ```yaml
-   serverImage: "ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4"
+   serverImage: "ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5"
    ```
-   - Pinned to specific version
+   - Pinned to specific version (Cassandra 5.0.6 + k8ssandra API v0.1.110 + AxonOps 1.0.5)
    - Easy to read and manage
-   - Audit trail maintained
+   - Full audit trail maintained
 
 3. **🥉 Latest Tags** (Development/Testing Only)
    ```yaml
@@ -110,11 +137,12 @@ Browse all available tags: [GitHub Container Registry](https://github.com/axonop
 
 ## Quick Start with Docker/Podman
 
-Run a single-node Cassandra instance locally:
+Run a single-node Cassandra instance locally for testing:
 
 ```bash
-# Pull the image
-docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0
+# Pull the latest 5.0 image (TESTING ONLY - not for production!)
+# Note: 5.0-latest is a floating tag that points to the latest 5.0.x minor + components
+docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0-latest
 
 # Run with AxonOps agent (replace with your credentials)
 docker run -d --name cassandra \
@@ -123,7 +151,7 @@ docker run -d --name cassandra \
   -e AXON_AGENT_HOST="agents.axonops.cloud" \
   -p 9042:9042 \
   -p 8080:8080 \
-  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0
+  ghcr.io/axonops/k8ssandra/cassandra:5.0-latest
 
 # Wait for Cassandra to be ready (check Management API)
 curl http://localhost:8080/api/v0/probes/readiness
@@ -132,12 +160,17 @@ curl http://localhost:8080/api/v0/probes/readiness
 docker exec -it cassandra cqlai
 ```
 
+**⚠️ For production use, pin to a specific immutable version:**
+```bash
+docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5
+```
+
 ### Using with Kubernetes (K8ssandra)
 
 For Kubernetes deployments, use the image with K8ssandra Operator:
 
 ```bash
-export IMAGE_NAME="ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0"
+export IMAGE_NAME="ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5"
 export AXON_AGENT_KEY="your-key"
 export AXON_AGENT_ORG="your-org"
 export AXON_AGENT_HOST="agents.axonops.cloud"
@@ -240,9 +273,224 @@ If you prefer to build images yourself instead of using the [pre-built images](#
 
 ```bash
 cd 5.0
-docker build -t your-registry/axonops-cassandra:5.0.6 .
-docker push your-registry/axonops-cassandra:5.0.6
+
+# Minimal build (required args only)
+docker build \
+  --build-arg CASSANDRA_VERSION=5.0.6 \
+  --build-arg MAJOR_VERSION=5.0 \
+  --build-arg K8SSANDRA_BASE_DIGEST=sha256:aa2de19866f3487abe0dff65e6b74f5a68c6c5a7d211b5b7a3e0b961603ba5af \
+  --build-arg K8SSANDRA_API_VERSION=0.1.110 \
+  --build-arg CQLAI_VERSION=0.0.31 \
+  -t your-registry/axonops-cassandra:5.0.6-v0.1.110-1.0.0 \
+  .
+
+docker push your-registry/axonops-cassandra:5.0.6-v0.1.110-1.0.0
 ```
+
+**Required build arguments (must provide):**
+- `CASSANDRA_VERSION` - Full Cassandra version (e.g., 5.0.6)
+- `MAJOR_VERSION` - Major.minor version matching the directory (e.g., 5.0)
+- `K8SSANDRA_BASE_DIGEST` - SHA256 digest of k8ssandra base image (supply chain security)
+- `K8SSANDRA_API_VERSION` - k8ssandra Management API version (e.g., 0.1.110)
+- `CQLAI_VERSION` - Version of cqlai to install (see [latest release](https://github.com/axonops/cqlai/releases))
+
+**Optional build arguments (will default to "unknown" if not provided):**
+- `BUILD_DATE` - Build timestamp (ISO 8601 format, e.g., `$(date -u +"%Y-%m-%dT%H:%M:%SZ")`)
+- `VCS_REF` - Git commit SHA (e.g., `$(git rev-parse HEAD)`)
+- `VERSION` - Container version (e.g., 1.0.0)
+- `GIT_TAG` - Git tag name (for release/tag links in banner)
+- `GITHUB_ACTOR` - Username who triggered build (for audit trail)
+- `IS_PRODUCTION_RELEASE` - Set to `true` for production (default: `false`)
+- `IMAGE_FULL_NAME` - Full image name with tag (displayed in startup banner)
+
+**Note:** Optional args enhance the startup banner and labels but aren't required for functionality.
+
+### Adding Support for New Cassandra Versions
+
+When a new Cassandra version is released (e.g., 5.0.7), follow these steps:
+
+**1. Get the k8ssandra base image digest:**
+
+```bash
+# Find the latest k8ssandra API version for the new Cassandra version
+VERSION="5.0.7"
+curl -sL "https://hub.docker.com/v2/repositories/k8ssandra/cass-management-api/tags?page_size=100&name=${VERSION}-ubi" | \
+  python3 -c "import sys, json; data=json.load(sys.stdin); \
+  results = [r for r in data.get('results', []) if r['name'].startswith('${VERSION}-ubi-v')]; \
+  results.sort(key=lambda x: x['name'], reverse=True); \
+  print(f\"Tag: {results[0]['name']}\nDigest: {results[0]['digest']}\") if results else print('Not found')"
+```
+
+This will show something like:
+```
+Tag: 5.0.7-ubi-v0.1.112
+Digest: sha256:newdigest123...
+```
+
+**2. Update the `K8SSANDRA_VERSIONS` repository variable:**
+
+```bash
+# Add the new version+digest to the JSON variable
+gh variable set K8SSANDRA_VERSIONS --body '{
+  "5.0.1+0.1.110": "sha256:...",
+  "5.0.2+0.1.110": "sha256:...",
+  ...
+  "5.0.6+0.1.110": "sha256:...",
+  "5.0.7+0.1.112": "sha256:newdigest123..."
+}'
+```
+
+**3. Update workflow matrix:**
+
+In `.github/workflows/k8ssandra-*-signed.yml`, add `5.0.7` to the matrix:
+
+```yaml
+matrix:
+  cassandra_version: [5.0.1, 5.0.2, 5.0.3, 5.0.4, 5.0.5, 5.0.6, 5.0.7]
+```
+
+**4. Update `ALL_VERSIONS` env var:**
+
+```yaml
+env:
+  ALL_VERSIONS: "5.0.1 5.0.2 5.0.3 5.0.4 5.0.5 5.0.6 5.0.7"
+```
+
+**5. Test and publish:**
+
+```bash
+# Development test
+git tag vdev-5.0.7-test
+git push origin vdev-5.0.7-test
+gh workflow run k8ssandra-development-publish-signed.yml \
+  -f dev_git_tag=vdev-5.0.7-test \
+  -f container_version=1.0.0
+
+# If tests pass, publish to production via main branch
+```
+
+### Updating for New k8ssandra Management API Versions
+
+When k8ssandra releases a new Management API version (e.g., v0.1.111) for existing Cassandra versions:
+
+**1. Get new digests for all affected Cassandra versions:**
+
+```bash
+# Check what changed - k8ssandra typically updates all versions together
+for version in 5.0.1 5.0.2 5.0.3 5.0.4 5.0.5 5.0.6; do
+  echo "=== Cassandra $version ==="
+  curl -sL "https://hub.docker.com/v2/repositories/k8ssandra/cass-management-api/tags?page_size=100&name=${version}-ubi-v0.1.111" | \
+  python3 -c "import sys, json; data=json.load(sys.stdin); \
+  results = [r for r in data.get('results', []) if r['name'] == '${version}-ubi-v0.1.111']; \
+  print(f\"  Digest: {results[0]['digest']}\") if results else print('  Not found')"
+done
+```
+
+**2. Update `K8SSANDRA_VERSIONS` variable with new API version:**
+
+```bash
+# Replace or add new composite keys with updated API version
+gh variable set K8SSANDRA_VERSIONS --body '{
+  "5.0.1+0.1.111": "sha256:new_digest_1...",
+  "5.0.2+0.1.111": "sha256:new_digest_2...",
+  "5.0.3+0.1.111": "sha256:new_digest_3...",
+  "5.0.4+0.1.111": "sha256:new_digest_4...",
+  "5.0.5+0.1.111": "sha256:new_digest_5...",
+  "5.0.6+0.1.111": "sha256:new_digest_6..."
+}'
+```
+
+**3. Increment AxonOps container version:**
+
+Since k8ssandra API version is a component update, increment the MINOR version:
+- Current: `1.0.0`
+- New: `1.1.0` (MINOR bump for component update)
+
+**4. Test and publish:**
+
+```bash
+# Test in development
+git tag vdev-k8s-api-update
+git push origin vdev-k8s-api-update
+gh workflow run k8ssandra-development-publish-signed.yml \
+  -f dev_git_tag=vdev-k8s-api-update \
+  -f container_version=1.1.0
+
+# After tests pass, create production release
+git checkout main
+git merge development
+git tag k8ssandra-1.1.0
+git push origin main k8ssandra-1.1.0
+
+gh workflow run k8ssandra-publish-signed.yml \
+  -f main_git_tag=k8ssandra-1.1.0 \
+  -f container_version=1.1.0
+```
+
+**Note:** k8ssandra typically releases new Management API versions monthly. The nightly version checker workflow (future implementation) will detect these automatically.
+
+**⚠️ Supply Chain Security Warning:**
+
+Our Dockerfiles extend from k8ssandra base images using digest pinning (not tags) to prevent supply chain attacks:
+
+```dockerfile
+# CORRECT - Digest-pinned (immutable, secure)
+FROM docker.io/k8ssandra/cass-management-api@sha256:aa2de19866f3487abe0dff65e6b74f5a68c6c5a7d211b5b7a3e0b961603ba5af
+
+# WRONG - Tag-based (mutable, vulnerable to supply chain attacks!)
+FROM docker.io/k8ssandra/cass-management-api:5.0.6-ubi
+```
+
+**Why digest pinning matters:**
+- Tags can be replaced maliciously (same tag, different malicious image)
+- Digests are cryptographically immutable - cannot be changed
+- Prevents silent compromise of your container supply chain
+- Industry best practice for production container builds
+
+**When extending ANY container image:**
+1. Get the digest using: `docker inspect <image:tag> --format='{{.RepoDigests}}'`
+2. Use `FROM image@digest` in your Dockerfile
+3. Document the version tag in a comment for human readability
+
+**Supply Chain Security:**
+
+Our containers extend from `k8ssandra/cass-management-api` base images. For supply chain security, we pin base images by digest (immutable) rather than tags. The `K8SSANDRA_BASE_DIGEST` maps Cassandra versions to verified image digests, preventing supply chain attacks where upstream images could be replaced maliciously.
+
+Digest mapping for 5.0.x versions:
+- 5.0.1: `sha256:51d2e8e6696ea37faf652c5bb33a8f8db9f9c565348a2161989ad8f0a9369fd9`
+- 5.0.2: `sha256:688f31162586238bd9e40ca698dcb9819a7b26baaa939f2758b844a73337155b`
+- 5.0.3: `sha256:dff75f5164bd49dd2ceaf6ba6a957eabacb13bd56b401a98c174633de94435cb`
+- 5.0.4: `sha256:553a5aa3170c3462a51e253fecd80260366a119bb298248482811a7b2d774b56`
+- 5.0.5: `sha256:801f14e369fbc90797bacbc755d5539f56506c30da5de005aedecabc0ca358bd`
+- 5.0.6: `sha256:aa2de19866f3487abe0dff65e6b74f5a68c6c5a7d211b5b7a3e0b961603ba5af`
+
+**How to get digests for new k8ssandra versions:**
+
+When k8ssandra releases a new Cassandra version, retrieve the digest using Docker Hub API:
+
+```bash
+# For a specific version (e.g., 5.0.7)
+VERSION="5.0.7"
+curl -sL "https://hub.docker.com/v2/repositories/k8ssandra/cass-management-api/tags?page_size=100&name=${VERSION}-ubi" | \
+  python3 -c "import sys, json; data=json.load(sys.stdin); \
+  results = [r for r in data.get('results', []) if r['name'].startswith('${VERSION}-ubi')]; \
+  [print(f\"Version: {r['name']}\nDigest: {r['digest']}\") for r in results[:1]]"
+```
+
+Or get all 5.0.x versions at once:
+
+```bash
+for version in 5.0.1 5.0.2 5.0.3 5.0.4 5.0.5 5.0.6; do
+  echo "=== Cassandra $version ==="
+  curl -sL "https://hub.docker.com/v2/repositories/k8ssandra/cass-management-api/tags?page_size=100&name=${version}-ubi" | \
+  python3 -c "import sys, json; data=json.load(sys.stdin); \
+  results = [r for r in data.get('results', []) if r['name'].startswith('${version}-ubi')]; \
+  [print(f\"  {r['digest']}\") for r in results[:1]]"
+  echo ""
+done
+```
+
+Once you have the digest, update the `K8SSANDRA_VERSIONS` repository variable with the new version+digest composite key.
 
 ## Deploying to Kubernetes
 
@@ -423,7 +671,8 @@ A complete K8ssandraCluster resource definition showcasing:
 **Cluster Specifications:**
 - Name: `axonops-k8ssandra-50`
 - Namespace: `k8ssandra-operator`
-- Cassandra Version: 5.0.5
+- Cassandra Version: 5.0.6
+- Image: `ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.0` (default)
 - Datacenter: `dc1` with 3 nodes
 
 **Resource Allocation:**
@@ -492,10 +741,16 @@ To use this example:
    export AXON_AGENT_KEY="your-key"
    export AXON_AGENT_ORG="your-org"
    export AXON_AGENT_HOST="agents.axonops.cloud"
-   export IMAGE_NAME="your-image"
+   # Optional: Override default image
+   export IMAGE_NAME="ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.0"
 
    cat my-cluster.yml | envsubst | kubectl apply -f -
    ```
+
+**Note:** The example uses the new image format `5.0.6-v0.1.110-1.0.0` which includes:
+- Cassandra version: 5.0.6
+- k8ssandra API version: v0.1.110
+- AxonOps container version: 1.0.0
 
 ## CI/CD Pipeline
 
@@ -507,8 +762,8 @@ The repository includes comprehensive GitHub Actions workflows for building, tes
 - **Build and Test:** `.github/workflows/k8ssandra-build-and-test.yml` - Docker build tests with full validation
 - **E2E Testing:** `.github/workflows/k8ssandra-e2e-test.yml` - End-to-end Kubernetes deployment testing
 - **Security Scanning:** `.github/workflows/k8ssandra-nightly-security-scan.yml` - Daily CVE scanning with email alerts
-- **Production Publish:** `.github/workflows/k8ssandra-publish.yml` - Manual production releases
-- **Development Publish:** `.github/workflows/development-k8ssandra-publish.yml` - Automatic development builds
+- **Production Publish (Signed):** `.github/workflows/k8ssandra-publish-signed.yml` - Manual production releases with Cosign signing
+- **Development Publish (Signed):** `.github/workflows/k8ssandra-development-publish-signed.yml` - Development builds with Cosign signing
 
 **Build and Test Workflow Triggers:**
 - Push to `development` or `main` branch (with `k8ssandra/**` changes)
@@ -557,35 +812,44 @@ The CI pipeline includes comprehensive testing:
 For complete release instructions, see [RELEASE.md](./RELEASE.md)
 
 **Image Tags:**
-Each release uses multi-dimensional tagging:
+Each release uses 3-dimensional tagging with k8ssandra API version tracking:
 
 ```
-ghcr.io/axonops/k8ssandra/cassandra:{CASSANDRA_VERSION}-{AXONOPS_VERSION}  # Immutable
-ghcr.io/axonops/k8ssandra/cassandra:{CASSANDRA_VERSION}-latest             # Patch-level latest
-ghcr.io/axonops/k8ssandra/cassandra:5.0-latest                             # Minor-level latest
-ghcr.io/axonops/k8ssandra/cassandra:latest                                 # Global latest
+ghcr.io/axonops/k8ssandra/cassandra:{CASS}-v{K8S_API}-{AXON}  # Fully immutable (all 3 versions)
+ghcr.io/axonops/k8ssandra/cassandra:{CASS}-v{K8S_API}         # Latest AxonOps for this Cassandra + k8ssandra combo
+ghcr.io/axonops/k8ssandra/cassandra:{CASS}                    # Latest k8ssandra API + AxonOps for this Cassandra minor
+ghcr.io/axonops/k8ssandra/cassandra:{MAJOR}-latest            # Latest minor in Cassandra major
+ghcr.io/axonops/k8ssandra/cassandra:latest                    # Latest across all Cassandra majors
 ```
 
-**Example:** For AxonOps release `1.0.1`, a total of 14 tags published:
+**Example:** For Cassandra `5.0.6`, k8ssandra API `v0.1.110`, and AxonOps `1.0.0` release:
 
-**Immutable tags** (6):
-- `5.0.1-1.0.1`, `5.0.2-1.0.1`, `5.0.3-1.0.1`, `5.0.4-1.0.1`, `5.0.5-1.0.1`, `5.0.6-1.0.1`
+**Fully immutable tags** (1 per Cassandra version, 6 total):
+- `5.0.1-v0.1.110-1.0.0`, `5.0.2-v0.1.110-1.0.0`, `5.0.3-v0.1.110-1.0.0`, `5.0.4-v0.1.110-1.0.0`, `5.0.5-v0.1.110-1.0.0`, `5.0.6-v0.1.110-1.0.0`
 
-**Patch-level latest tags** (6):
-- `5.0.1-latest` → `5.0.1-1.0.1`
-- `5.0.2-latest` → `5.0.2-1.0.1`
-- `5.0.3-latest` → `5.0.3-1.0.1`
-- `5.0.4-latest` → `5.0.4-1.0.1`
-- `5.0.5-latest` → `5.0.5-1.0.1`
-- `5.0.6-latest` → `5.0.6-1.0.1`
+**Floating tags** (track latest AxonOps for Cassandra + k8ssandra combo, 6 total):
+- `5.0.1-v0.1.110` → `5.0.1-v0.1.110-1.0.0`
+- `5.0.2-v0.1.110` → `5.0.2-v0.1.110-1.0.0`
+- `5.0.3-v0.1.110` → `5.0.3-v0.1.110-1.0.0`
+- `5.0.4-v0.1.110` → `5.0.4-v0.1.110-1.0.0`
+- `5.0.5-v0.1.110` → `5.0.5-v0.1.110-1.0.0`
+- `5.0.6-v0.1.110` → `5.0.6-v0.1.110-1.0.0`
+
+**Floating tags** (track latest k8ssandra + AxonOps for each Cassandra minor, 6 total):
+- `5.0.1` → `5.0.1-v0.1.110-1.0.0`
+- `5.0.2` → `5.0.2-v0.1.110-1.0.0`
+- `5.0.3` → `5.0.3-v0.1.110-1.0.0`
+- `5.0.4` → `5.0.4-v0.1.110-1.0.0`
+- `5.0.5` → `5.0.5-v0.1.110-1.0.0`
+- `5.0.6` → `5.0.6-v0.1.110-1.0.0`
 
 **Minor-level latest tag** (1):
-- `5.0-latest` → `5.0.6-1.0.1`
+- `5.0-latest` → `5.0.6-v0.1.110-1.0.0`
 
 **Global latest tag** (1):
-- `latest` → `5.0.6-1.0.1`
+- `latest` → `5.0.6-v0.1.110-1.0.0`
 
-**Total:** 14 tags (6 immutable + 6 patch-latest + 1 minor-latest + 1 global-latest)
+**Total:** 20 tags (6 immutable + 6 k8ssandra-floating + 6 cassandra-floating + 1 minor-latest + 1 global-latest)
 
 ## Container Features
 
@@ -611,35 +875,48 @@ docker logs <container-name> | head -30
 kubectl logs <pod-name> -n k8ssandra-operator -c cassandra | head -30
 ```
 
-**Example output:**
+**Example output (production release):**
 ```
 ================================================================================
-AxonOps K8ssandra Apache Cassandra 5.0.6 + AxonOps agent 2.0.11
-Container v1.0.3 (git: 307d28c)
+AxonOps K8ssandra Apache Cassandra 5.0.6
+Image: ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.0
+Built: 2025-12-09T14:40:13Z
+Release: https://github.com/axonops/axonops-containers/releases/tag/1.0.0
+Built by: GitHub Actions
 ================================================================================
 
 Component Versions:
   Cassandra:          5.0.6
-  Java:               17.0.17
-  AxonOps Agent:      AxonOps agent 2.0.11
+  k8ssandra API:      0.1.110
+  Java:               OpenJDK Runtime Environment (Red_Hat-17.0.17.0.10-1) (build 17.0.17+10-LTS)
+  AxonOps Agent:      2.0.11
   AxonOps Java Agent: axon-cassandra5.0-agent-jdk17-1.0.12-1.noarch
-  cqlai:              cqlai version v0.0.31
+  cqlai:              v0.0.31
   jemalloc:           jemalloc-5.2.1-2.el9.x86_64
-  OS:                 Red Hat Enterprise Linux 9.7 (UBI - freely redistributable)
+  OS:                 Red Hat Enterprise Linux 9.7 (Plow) (UBI - Universal Base Image, freely redistributable)
   Platform:           x86_64
 
+Supply Chain Security:
+  Base image:         k8ssandra/cass-management-api:5.0.6-ubi-v0.1.110
+  Base image digest:  sha256:aa2de19866f3487abe0dff65e6b74f5a68c6c5a7d211b5b7a3e0b961603ba5af
+
 Runtime Environment:
-  Hostname:           cassandra-pod-0
+  Hostname:           demo-dc1-default-sts-0
   Kubernetes:         Yes
     API Server:       10.43.0.1:443
-    Pod:              cassandra-pod-0
+    Pod:              demo-dc1-default-sts-0
 
 AxonOps Configuration:
   Server:             agents.axonops.cloud
-  Organization:       your-org
+  Organization:       my-org
   Agent Key:          ***configured***
+
+================================================================================
+Starting Cassandra with Management API and AxonOps Agent...
 ================================================================================
 ```
+
+**Production builds** include additional metadata: `Image`, `Release` link, and `Built by` fields. **Development builds** show only the essential fields (`Built` timestamp).
 
 This banner makes debugging customer environments much easier by showing all relevant version information in one place.
 
