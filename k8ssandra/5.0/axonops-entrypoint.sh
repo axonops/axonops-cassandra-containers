@@ -15,7 +15,12 @@ print_startup_banner() {
 
     # Title
     echo "AxonOps K8ssandra Apache Cassandra ${CASSANDRA_VERSION:-unknown}"
-    echo "Container v${CONTAINER_VERSION:-unknown} - Built: ${CONTAINER_BUILD_DATE:-unknown}"
+    if [ -n "${CONTAINER_IMAGE}" ] && [ "${CONTAINER_IMAGE}" != "unknown" ] && [ "${CONTAINER_IMAGE}" != "" ]; then
+      echo "Image: ${CONTAINER_IMAGE}"
+    fi
+    if [ -n "${CONTAINER_BUILD_DATE}" ] && [ "${CONTAINER_BUILD_DATE}" != "unknown" ] && [ "${CONTAINER_BUILD_DATE}" != "" ]; then
+      echo "Built: ${CONTAINER_BUILD_DATE}"
+    fi
 
     # Show release/tag link if available (CI builds)
     if [ -n "${CONTAINER_GIT_TAG}" ] && [ "${CONTAINER_GIT_TAG}" != "unknown" ] && [ "${CONTAINER_GIT_TAG}" != "" ]; then
