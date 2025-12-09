@@ -326,6 +326,50 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Pull built image for testing
+        run: |
+          docker pull ghcr.io/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          docker tag ghcr.io/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }} axonops-cassandra:test
+
+      - name: Start container and wait for services
+        uses: ./.github/actions/k8ssandra-start-and-wait
+        with:
+          container_name: cassandra-test-${{ matrix.cassandra_version }}
+
+      - name: Verify versions (jemalloc, Cassandra, Java)
+        uses: ./.github/actions/k8ssandra-verify-versions
+        with:
+          cassandra_version: ${{ matrix.cassandra_version }}
+          container_name: cassandra-test-${{ matrix.cassandra_version }}
+
+      - name: Test Management API
+        uses: ./.github/actions/k8ssandra-test-management-api
+        with:
+          container_name: cassandra-test-${{ matrix.cassandra_version }}
+
+      - name: Verify AxonOps
+        uses: ./.github/actions/k8ssandra-verify-axonops
+        with:
+          container_name: cassandra-test-${{ matrix.cassandra_version }}
+
+      - name: Test cqlai
+        uses: ./.github/actions/k8ssandra-test-cqlai
+        with:
+          container_name: cassandra-test-${{ matrix.cassandra_version }}
+
+      - name: Collect logs
+        if: always()
+        uses: ./.github/actions/k8ssandra-collect-logs
+        with:
+          container_name: cassandra-test-${{ matrix.cassandra_version }}
+          cassandra_version: ${{ matrix.cassandra_version }}
+
+      - name: Cleanup test container
+        if: always()
+        run: |
+          docker stop cassandra-test-${{ matrix.cassandra_version }} || true
+          docker rm cassandra-test-${{ matrix.cassandra_version }} || true
+
       - name: Sign container image
         uses: ./.github/actions/k8ssandra-sign-container
         with:
