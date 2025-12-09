@@ -7,6 +7,9 @@ inputs:
   base_version:
     description: 'Base version for directory path (e.g., 5.0)'
     required: true
+  cqlai_version:
+    description: 'cqlai version to install'
+    required: true
 
 runs:
   using: 'composite'
@@ -20,6 +23,7 @@ runs:
         docker build \
           --build-arg CASSANDRA_VERSION=${{ inputs.cassandra_version }} \
           --build-arg MAJOR_VERSION=${{ inputs.base_version }} \
+          --build-arg CQLAI_VERSION=${{ inputs.cqlai_version }} \
           -t axonops-cassandra:verify \
           ./k8ssandra/${{ inputs.base_version }} 2>&1 | tee /tmp/build-output.log
 
