@@ -16,8 +16,10 @@ print_startup_banner() {
     # Title with all key versions
     echo "AxonOps K8ssandra Apache Cassandra ${CASSANDRA_VERSION:-unknown} + ${AXON_AGENT_VERSION:-unknown}"
     echo "Container v${CONTAINER_VERSION:-unknown}"
-    if [ -n "${CONTAINER_GIT_TAG}" ] && [ "${CONTAINER_GIT_TAG}" != "unknown" ]; then
-      if [ "${IS_PRODUCTION_RELEASE}" = "true" ]; then
+
+    # Show release/tag link if available (CI builds)
+    if [ -n "${CONTAINER_GIT_TAG}" ] && [ "${CONTAINER_GIT_TAG}" != "unknown" ] && [ "${CONTAINER_GIT_TAG}" != "" ]; then
+      if [ "${IS_PRODUCTION_RELEASE:-false}" = "true" ]; then
         # Production build - link to release page (has release notes)
         echo "Release: https://github.com/axonops/axonops-containers/releases/tag/${CONTAINER_GIT_TAG}"
       else
@@ -25,10 +27,12 @@ print_startup_banner() {
         echo "Tag:     https://github.com/axonops/axonops-containers/tree/${CONTAINER_GIT_TAG}"
       fi
     fi
-    echo "Commit:  https://github.com/axonops/axonops-containers/commit/${CONTAINER_REVISION:-unknown}"
-    if [ -n "${CONTAINER_BUILT_BY}" ] && [ "${CONTAINER_BUILT_BY}" != "unknown" ]; then
+
+    # Show who built it if available (CI builds)
+    if [ -n "${CONTAINER_BUILT_BY}" ] && [ "${CONTAINER_BUILT_BY}" != "unknown" ] && [ "${CONTAINER_BUILT_BY}" != "" ]; then
       echo "Built by: ${CONTAINER_BUILT_BY}"
     fi
+
     echo "================================================================================"
     echo ""
 
