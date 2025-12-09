@@ -22,6 +22,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      - name: Random startup delay to avoid runner contention
+        run: |
+          DELAY=$((RANDOM % 30))
+          echo "Waiting ${DELAY}s to avoid runner contention..."
+          sleep $DELAY
+
       - name: Checkout code
         uses: actions/checkout@v4
 
