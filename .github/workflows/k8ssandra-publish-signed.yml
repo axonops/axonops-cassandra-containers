@@ -257,4 +257,6 @@ jobs:
           image: ghcr.io/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
 
       - name: Image published and signed
-        run: echo "✓ Image pushed and signed: ghcr.io/${{ env.IMAGE_NAME }}:${{ matrix.cassandra_version }}-${{ inputs.container_version }}"
+        run: |
+          echo "✓ Image pushed and signed"
+          echo "   ghcr.io/${{ env.IMAGE_NAME }}:${{ matrix.cassandra_version }}-${{ inputs.container_version }}"
