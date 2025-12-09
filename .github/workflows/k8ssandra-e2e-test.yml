@@ -1,5 +1,7 @@
 name: K8ssandra E2E Test
 
+run-name: "K8ssandra E2E: Cassandra ${{ inputs.cassandra_version }} (${{ inputs.container_image }})"
+
 on:
   workflow_dispatch:
     inputs:
