@@ -15,6 +15,7 @@ Container build definitions and CI/CD pipelines for AxonOps container images.
   - [CVE Policy](#cve-policy)
   - [Gold Standard Security Deployment](#gold-standard-security-deployment)
 - [Development](#development)
+  - [Container Security Standards](#container-security-standards-all-components)
 - [Releasing](#releasing)
   - [Development Publishing](#development-publishing)
   - [Production Publishing](#production-publishing)
