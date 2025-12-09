@@ -15,8 +15,8 @@ print_startup_banner() {
 
     # Title with all key versions
     echo "AxonOps K8ssandra Apache Cassandra ${CASSANDRA_VERSION:-unknown} + ${AXON_AGENT_VERSION:-unknown}"
-    echo "Container v${CONTAINER_VERSION:-unknown} (git: ${CONTAINER_REVISION:-unknown})"
-    echo "Base: k8ssandra/cass-management-api v${K8SSANDRA_API_VERSION:-unknown}"
+    echo "Container v${CONTAINER_VERSION:-unknown}"
+    echo "Build: https://github.com/axonops/axonops-containers/commit/${CONTAINER_REVISION:-unknown}"
     echo "================================================================================"
     echo ""
 

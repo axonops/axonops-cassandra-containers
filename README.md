@@ -279,6 +279,48 @@ git add . && git commit -S -m "Add feature" && git push origin development
 # For production: create PR development → main (approval required)
 ```
 
+### Container Security Standards (ALL Components)
+
+**Every container we build MUST follow these security practices:**
+
+1. **Digest Pinning (Supply Chain Security)**
+   - **ALWAYS** pin base images by SHA256 digest, NEVER by tag
+   - Tags are mutable - can be replaced maliciously
+   - Digests are immutable - cryptographically guaranteed
+   - Example:
+     ```dockerfile
+     # CORRECT
+     FROM upstream/image@sha256:abc123...
+
+     # WRONG - Supply chain vulnerability!
+     FROM upstream/image:latest
+     FROM upstream/image:v1.0.0
+     ```
+
+2. **Container Signing (Authenticity)**
+   - **ALL** published images MUST be signed with Cosign
+   - Use keyless signing with GitHub OIDC (no secret management)
+   - Sign by digest immediately after build
+   - Publish to `ghcr.io/axonops/<component>/<image-name>:tag`
+
+3. **Verification & Testing**
+   - Verify checksums for downloaded artifacts (RPMs, tarballs, etc.)
+   - Verify base image digest matches expected version
+   - Automated startup error detection
+   - Security scanning with Trivy before publishing
+
+**This pattern is MANDATORY for:**
+- ✅ k8ssandra containers (implemented)
+- 🔲 Future kafka containers
+- 🔲 Future opensearch containers
+- 🔲 Any other component we add
+
+**Why these standards matter:**
+- Prevents supply chain attacks (malicious base images)
+- Ensures image authenticity (Cosign signatures)
+- Provides full audit trail (digests + signatures)
+- Meets compliance requirements for regulated environments
+
 ## Releasing
 
 ### Development Publishing

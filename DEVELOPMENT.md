@@ -22,9 +22,34 @@ axonops-cassandra-containers/
 ## Container Image Conventions
 
 ### Base Images
+
+**Supply Chain Security - CRITICAL:**
+- **ALWAYS** pin base images by digest (@sha256:...), NEVER by tag
+- Tags are mutable and can be replaced maliciously (supply chain attack)
+- Digests are immutable and cryptographically verified
+- Document both the version tag AND digest in code/docs for clarity
+
+**Example (CORRECT):**
+```dockerfile
+ARG BASE_DIGEST=sha256:aa2de19866f3487abe0dff65e6b74f5a68c6c5a7d211b5b7a3e0b961603ba5af
+FROM docker.io/k8ssandra/cass-management-api@${BASE_DIGEST}
+# Comment: This is k8ssandra/cass-management-api:5.0.6-ubi-v0.1.110
+```
+
+**Example (WRONG - Supply Chain Vulnerability!):**
+```dockerfile
+FROM docker.io/k8ssandra/cass-management-api:5.0.6-ubi  # ❌ Mutable tag!
+```
+
+**Why this matters:**
+- Attacker could replace upstream image with malicious version
+- Same tag, different content = silent compromise
+- Digest pinning prevents this attack vector
+
+**Additional requirements:**
 - Use official upstream images where possible (Docker Hub official images)
 - Document base image source in component README
-- Pin base image versions explicitly
+- Store digest mappings in repository variables for maintainability
 
 ### Multi-Architecture Support
 - All images must support: `linux/amd64`, `linux/arm64`

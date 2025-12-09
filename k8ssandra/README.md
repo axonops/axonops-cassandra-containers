@@ -245,23 +245,49 @@ cd 5.0
 docker build \
   --build-arg CASSANDRA_VERSION=5.0.6 \
   --build-arg MAJOR_VERSION=5.0 \
+  --build-arg K8SSANDRA_BASE_DIGEST=sha256:aa2de19866f3487abe0dff65e6b74f5a68c6c5a7d211b5b7a3e0b961603ba5af \
+  --build-arg K8SSANDRA_API_VERSION=0.1.110 \
   --build-arg CQLAI_VERSION=0.0.31 \
-  -t your-registry/axonops-cassandra:5.0.6 \
+  -t your-registry/axonops-cassandra:5.0.6-v0.1.110-1.0.0 \
   .
 
-docker push your-registry/axonops-cassandra:5.0.6
+docker push your-registry/axonops-cassandra:5.0.6-v0.1.110-1.0.0
 ```
 
 **Required build arguments:**
 - `CASSANDRA_VERSION` - Full Cassandra version (e.g., 5.0.6)
 - `MAJOR_VERSION` - Major.minor version matching the directory (e.g., 5.0)
-- `K8SSANDRA_BASE_DIGEST` - SHA256 digest of k8ssandra base image (supply chain security)
+- `K8SSANDRA_BASE_DIGEST` - SHA256 digest of k8ssandra base image (**REQUIRED for supply chain security**)
+- `K8SSANDRA_API_VERSION` - k8ssandra Management API version (e.g., 0.1.110)
 - `CQLAI_VERSION` - Version of cqlai to install (see [latest release](https://github.com/axonops/cqlai/releases))
 
 **Optional build arguments:**
 - `BUILD_DATE` - Build timestamp (default: current time)
 - `VCS_REF` - Git commit SHA (default: current commit)
 - `VERSION` - Container version label (default: dev)
+
+**⚠️ Supply Chain Security Warning:**
+
+Our Dockerfiles extend from k8ssandra base images using digest pinning (not tags) to prevent supply chain attacks:
+
+```dockerfile
+# CORRECT - Digest-pinned (immutable, secure)
+FROM docker.io/k8ssandra/cass-management-api@sha256:aa2de19866f3487abe0dff65e6b74f5a68c6c5a7d211b5b7a3e0b961603ba5af
+
+# WRONG - Tag-based (mutable, vulnerable to supply chain attacks!)
+FROM docker.io/k8ssandra/cass-management-api:5.0.6-ubi
+```
+
+**Why digest pinning matters:**
+- Tags can be replaced maliciously (same tag, different malicious image)
+- Digests are cryptographically immutable - cannot be changed
+- Prevents silent compromise of your container supply chain
+- Industry best practice for production container builds
+
+**When extending ANY container image:**
+1. Get the digest using: `docker inspect <image:tag> --format='{{.RepoDigests}}'`
+2. Use `FROM image@digest` in your Dockerfile
+3. Document the version tag in a comment for human readability
 
 **Supply Chain Security:**
 
