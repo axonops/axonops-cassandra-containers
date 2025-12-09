@@ -319,13 +319,16 @@ git add . && git commit -S -m "Add feature" && git push origin development
 
 ### Development Publishing
 
-**Purpose:** Publish images to development registry for testing before production release.
+**Purpose:** Publish signed images to development registry for testing before production release.
 
-**Registry:** `ghcr.io/axonops/development-<image-name>`
+**Registry:** `ghcr.io/axonops/development/<component>/<image-name>`
+
+**Example:** `ghcr.io/axonops/development/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.0`
 
 **Characteristics:**
-- Images can be overwritten (no version validation)
-- Allows iterative testing with same tag
+- All images are Cosign signed (same as production)
+- Uses same security standards as production (digest pinning, checksums, verification)
+- Allows testing with specific versions
 - No GitHub Releases created
 - Tagged from `development` branch
 
