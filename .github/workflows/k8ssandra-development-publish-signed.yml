@@ -83,6 +83,7 @@ jobs:
             VCS_REF=${{ github.sha }}
             VERSION=${{ inputs.container_version }}
             GIT_TAG=${{ inputs.dev_git_tag }}
+            GITHUB_ACTOR=${{ github.actor }}
             CQLAI_VERSION=${{ vars.K8SSANDRA_CQLAI_VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -247,6 +248,7 @@ jobs:
             VCS_REF=${{ github.sha }}
             VERSION=${{ inputs.container_version }}
             GIT_TAG=${{ inputs.dev_git_tag }}
+            GITHUB_ACTOR=${{ github.actor }}
             CQLAI_VERSION=${{ vars.K8SSANDRA_CQLAI_VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -277,6 +279,7 @@ jobs:
             VCS_REF=${{ github.sha }}
             VERSION=${{ inputs.container_version }}
             GIT_TAG=${{ inputs.dev_git_tag }}
+            GITHUB_ACTOR=${{ github.actor }}
             CQLAI_VERSION=${{ vars.K8SSANDRA_CQLAI_VERSION }}
           cache-from: type=gha
 

@@ -20,6 +20,9 @@ print_startup_banner() {
       echo "Tag:    https://github.com/axonops/axonops-containers/releases/tag/${CONTAINER_GIT_TAG}"
     fi
     echo "Commit: https://github.com/axonops/axonops-containers/commit/${CONTAINER_REVISION:-unknown}"
+    if [ -n "${CONTAINER_BUILT_BY}" ] && [ "${CONTAINER_BUILT_BY}" != "unknown" ]; then
+      echo "Built by: ${CONTAINER_BUILT_BY}"
+    fi
     echo "================================================================================"
     echo ""
 
