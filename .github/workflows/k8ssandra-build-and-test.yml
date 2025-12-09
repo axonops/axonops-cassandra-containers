@@ -131,6 +131,12 @@ jobs:
         with:
           container_name: cassandra-test
 
+      - name: Verify Management API version
+        uses: ./.github/actions/k8ssandra-verify-mgmt-api-version
+        with:
+          container_name: cassandra-test
+          expected_api_version: ${{ steps.k8ssandra.outputs.k8ssandra_api_version }}
+
       - name: Verify AxonOps
         uses: ./.github/actions/k8ssandra-verify-axonops
         with:
@@ -278,6 +284,12 @@ jobs:
         uses: ./.github/actions/k8ssandra-test-management-api
         with:
           container_name: cassandra-test
+
+      - name: Verify Management API version
+        uses: ./.github/actions/k8ssandra-verify-mgmt-api-version
+        with:
+          container_name: cassandra-test
+          expected_api_version: ${{ steps.k8ssandra.outputs.k8ssandra_api_version }}
 
       - name: Verify AxonOps
         uses: ./.github/actions/k8ssandra-verify-axonops

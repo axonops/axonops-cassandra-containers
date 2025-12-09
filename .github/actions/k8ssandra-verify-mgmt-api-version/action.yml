@@ -1,0 +1,77 @@
+name: 'K8ssandra Verify Management API Version'
+description: 'Verifies the k8ssandra Management API version matches expected version from base image'
+
+inputs:
+  container_name:
+    description: 'Name of the running container'
+    required: true
+  expected_api_version:
+    description: 'Expected k8ssandra Management API version (e.g., 0.1.110)'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Verify Management API version from JAR manifest
+      shell: bash
+      run: |
+        echo "=== Verifying k8ssandra Management API version ==="
+        echo "Expected version: v${{ inputs.expected_api_version }}"
+        echo ""
+
+        # Try to extract version from JAR manifest
+        echo "Checking JAR manifest..."
+        MANIFEST=$(docker exec ${{ inputs.container_name }} sh -c 'unzip -p /opt/mgmtapi/management-api-server-*.jar META-INF/MANIFEST.MF 2>/dev/null' || echo "")
+
+        if [ -n "$MANIFEST" ]; then
+          echo "JAR Manifest found:"
+          echo "$MANIFEST" | grep -E "(Implementation-Version|Bundle-Version|Version)" || echo "No version fields found in manifest"
+          echo ""
+
+          # Try to extract version (common manifest fields)
+          ACTUAL_VERSION=$(echo "$MANIFEST" | grep -E "^(Implementation-Version|Bundle-Version):" | head -1 | sed 's/^[^:]*: *//' | tr -d '\r')
+
+          if [ -n "$ACTUAL_VERSION" ]; then
+            echo "Found version in JAR: $ACTUAL_VERSION"
+
+            # Check if it matches expected (allowing for different format variations)
+            if echo "$ACTUAL_VERSION" | grep -q "${{ inputs.expected_api_version }}"; then
+              echo "✓ Management API version verified: $ACTUAL_VERSION matches expected v${{ inputs.expected_api_version }}"
+            else
+              echo "⚠️  WARNING: Management API version mismatch!"
+              echo "   Expected: v${{ inputs.expected_api_version }}"
+              echo "   Found:    $ACTUAL_VERSION"
+              echo ""
+              echo "This could indicate the base image digest doesn't match the expected k8ssandra version."
+              exit 1
+            fi
+          else
+            echo "⚠️  Could not extract version from JAR manifest"
+            echo "Falling back to build-info.txt verification..."
+          fi
+        fi
+
+        # Fallback: Check build-info.txt (what we set at build time)
+        echo ""
+        echo "Verifying from build-info.txt..."
+        BUILD_INFO=$(docker exec ${{ inputs.container_name }} cat /etc/axonops/build-info.txt 2>/dev/null || echo "")
+
+        if echo "$BUILD_INFO" | grep -q "K8SSANDRA_API_VERSION"; then
+          RECORDED_VERSION=$(echo "$BUILD_INFO" | grep "K8SSANDRA_API_VERSION" | cut -d'"' -f2)
+          echo "Build-info.txt records: v$RECORDED_VERSION"
+
+          if [ "$RECORDED_VERSION" = "${{ inputs.expected_api_version }}" ]; then
+            echo "✓ Build info version matches expected: v${{ inputs.expected_api_version }}"
+          else
+            echo "❌ ERROR: Build info version mismatch!"
+            echo "   Expected: v${{ inputs.expected_api_version }}"
+            echo "   Found:    v$RECORDED_VERSION"
+            exit 1
+          fi
+        else
+          echo "❌ ERROR: K8SSANDRA_API_VERSION not found in build-info.txt"
+          exit 1
+        fi
+
+        echo ""
+        echo "=== Management API version verification complete ==="
