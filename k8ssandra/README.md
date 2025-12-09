@@ -275,6 +275,34 @@ Digest mapping for 5.0.x versions:
 - 5.0.5: `sha256:801f14e369fbc90797bacbc755d5539f56506c30da5de005aedecabc0ca358bd`
 - 5.0.6: `sha256:aa2de19866f3487abe0dff65e6b74f5a68c6c5a7d211b5b7a3e0b961603ba5af`
 
+**How to get digests for new k8ssandra versions:**
+
+When k8ssandra releases a new Cassandra version, retrieve the digest using Docker Hub API:
+
+```bash
+# For a specific version (e.g., 5.0.7)
+VERSION="5.0.7"
+curl -sL "https://hub.docker.com/v2/repositories/k8ssandra/cass-management-api/tags?page_size=100&name=${VERSION}-ubi" | \
+  python3 -c "import sys, json; data=json.load(sys.stdin); \
+  results = [r for r in data.get('results', []) if r['name'].startswith('${VERSION}-ubi')]; \
+  [print(f\"Version: {r['name']}\nDigest: {r['digest']}\") for r in results[:1]]"
+```
+
+Or get all 5.0.x versions at once:
+
+```bash
+for version in 5.0.1 5.0.2 5.0.3 5.0.4 5.0.5 5.0.6; do
+  echo "=== Cassandra $version ==="
+  curl -sL "https://hub.docker.com/v2/repositories/k8ssandra/cass-management-api/tags?page_size=100&name=${version}-ubi" | \
+  python3 -c "import sys, json; data=json.load(sys.stdin); \
+  results = [r for r in data.get('results', []) if r['name'].startswith('${version}-ubi')]; \
+  [print(f\"  {r['digest']}\") for r in results[:1]]"
+  echo ""
+done
+```
+
+Once you have the digest, update the `K8SSANDRA_BASE_DIGESTS` repository variable with the new version mapping.
+
 ## Deploying to Kubernetes
 
 **Note:** Commands in this section assume you are in the `k8ssandra/` directory.
