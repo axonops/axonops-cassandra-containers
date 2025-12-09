@@ -241,7 +241,7 @@ If you prefer to build images yourself instead of using the [pre-built images](#
 ```bash
 cd 5.0
 
-# Build with required build args
+# Minimal build (required args only)
 docker build \
   --build-arg CASSANDRA_VERSION=5.0.6 \
   --build-arg MAJOR_VERSION=5.0 \
@@ -254,17 +254,147 @@ docker build \
 docker push your-registry/axonops-cassandra:5.0.6-v0.1.110-1.0.0
 ```
 
-**Required build arguments:**
+**Required build arguments (must provide):**
 - `CASSANDRA_VERSION` - Full Cassandra version (e.g., 5.0.6)
 - `MAJOR_VERSION` - Major.minor version matching the directory (e.g., 5.0)
-- `K8SSANDRA_BASE_DIGEST` - SHA256 digest of k8ssandra base image (**REQUIRED for supply chain security**)
+- `K8SSANDRA_BASE_DIGEST` - SHA256 digest of k8ssandra base image (supply chain security)
 - `K8SSANDRA_API_VERSION` - k8ssandra Management API version (e.g., 0.1.110)
 - `CQLAI_VERSION` - Version of cqlai to install (see [latest release](https://github.com/axonops/cqlai/releases))
 
-**Optional build arguments:**
-- `BUILD_DATE` - Build timestamp (default: current time)
-- `VCS_REF` - Git commit SHA (default: current commit)
-- `VERSION` - Container version label (default: dev)
+**Optional build arguments (will default to "unknown" if not provided):**
+- `BUILD_DATE` - Build timestamp (ISO 8601 format, e.g., `$(date -u +"%Y-%m-%dT%H:%M:%SZ")`)
+- `VCS_REF` - Git commit SHA (e.g., `$(git rev-parse HEAD)`)
+- `VERSION` - Container version (e.g., 1.0.0)
+- `GIT_TAG` - Git tag name (for release/tag links in banner)
+- `GITHUB_ACTOR` - Username who triggered build (for audit trail)
+- `IS_PRODUCTION_RELEASE` - Set to `true` for production (default: `false`)
+- `IMAGE_FULL_NAME` - Full image name with tag (displayed in startup banner)
+
+**Note:** Optional args enhance the startup banner and labels but aren't required for functionality.
+
+### Adding Support for New Cassandra Versions
+
+When a new Cassandra version is released (e.g., 5.0.7), follow these steps:
+
+**1. Get the k8ssandra base image digest:**
+
+```bash
+# Find the latest k8ssandra API version for the new Cassandra version
+VERSION="5.0.7"
+curl -sL "https://hub.docker.com/v2/repositories/k8ssandra/cass-management-api/tags?page_size=100&name=${VERSION}-ubi" | \
+  python3 -c "import sys, json; data=json.load(sys.stdin); \
+  results = [r for r in data.get('results', []) if r['name'].startswith('${VERSION}-ubi-v')]; \
+  results.sort(key=lambda x: x['name'], reverse=True); \
+  print(f\"Tag: {results[0]['name']}\nDigest: {results[0]['digest']}\") if results else print('Not found')"
+```
+
+This will show something like:
+```
+Tag: 5.0.7-ubi-v0.1.112
+Digest: sha256:newdigest123...
+```
+
+**2. Update the `K8SSANDRA_VERSIONS` repository variable:**
+
+```bash
+# Add the new version+digest to the JSON variable
+gh variable set K8SSANDRA_VERSIONS --body '{
+  "5.0.1+0.1.110": "sha256:...",
+  "5.0.2+0.1.110": "sha256:...",
+  ...
+  "5.0.6+0.1.110": "sha256:...",
+  "5.0.7+0.1.112": "sha256:newdigest123..."
+}'
+```
+
+**3. Update workflow matrix:**
+
+In `.github/workflows/k8ssandra-*-signed.yml`, add `5.0.7` to the matrix:
+
+```yaml
+matrix:
+  cassandra_version: [5.0.1, 5.0.2, 5.0.3, 5.0.4, 5.0.5, 5.0.6, 5.0.7]
+```
+
+**4. Update `ALL_VERSIONS` env var:**
+
+```yaml
+env:
+  ALL_VERSIONS: "5.0.1 5.0.2 5.0.3 5.0.4 5.0.5 5.0.6 5.0.7"
+```
+
+**5. Test and publish:**
+
+```bash
+# Development test
+git tag vdev-5.0.7-test
+git push origin vdev-5.0.7-test
+gh workflow run k8ssandra-development-publish-signed.yml \
+  -f dev_git_tag=vdev-5.0.7-test \
+  -f container_version=1.0.0
+
+# If tests pass, publish to production via main branch
+```
+
+### Updating for New k8ssandra Management API Versions
+
+When k8ssandra releases a new Management API version (e.g., v0.1.111) for existing Cassandra versions:
+
+**1. Get new digests for all affected Cassandra versions:**
+
+```bash
+# Check what changed - k8ssandra typically updates all versions together
+for version in 5.0.1 5.0.2 5.0.3 5.0.4 5.0.5 5.0.6; do
+  echo "=== Cassandra $version ==="
+  curl -sL "https://hub.docker.com/v2/repositories/k8ssandra/cass-management-api/tags?page_size=100&name=${version}-ubi-v0.1.111" | \
+  python3 -c "import sys, json; data=json.load(sys.stdin); \
+  results = [r for r in data.get('results', []) if r['name'] == '${version}-ubi-v0.1.111']; \
+  print(f\"  Digest: {results[0]['digest']}\") if results else print('  Not found')"
+done
+```
+
+**2. Update `K8SSANDRA_VERSIONS` variable with new API version:**
+
+```bash
+# Replace or add new composite keys with updated API version
+gh variable set K8SSANDRA_VERSIONS --body '{
+  "5.0.1+0.1.111": "sha256:new_digest_1...",
+  "5.0.2+0.1.111": "sha256:new_digest_2...",
+  "5.0.3+0.1.111": "sha256:new_digest_3...",
+  "5.0.4+0.1.111": "sha256:new_digest_4...",
+  "5.0.5+0.1.111": "sha256:new_digest_5...",
+  "5.0.6+0.1.111": "sha256:new_digest_6..."
+}'
+```
+
+**3. Increment AxonOps container version:**
+
+Since k8ssandra API version is a component update, increment the MINOR version:
+- Current: `1.0.0`
+- New: `1.1.0` (MINOR bump for component update)
+
+**4. Test and publish:**
+
+```bash
+# Test in development
+git tag vdev-k8s-api-update
+git push origin vdev-k8s-api-update
+gh workflow run k8ssandra-development-publish-signed.yml \
+  -f dev_git_tag=vdev-k8s-api-update \
+  -f container_version=1.1.0
+
+# After tests pass, create production release
+git checkout main
+git merge development
+git tag k8ssandra-1.1.0
+git push origin main k8ssandra-1.1.0
+
+gh workflow run k8ssandra-publish-signed.yml \
+  -f main_git_tag=k8ssandra-1.1.0 \
+  -f container_version=1.1.0
+```
+
+**Note:** k8ssandra typically releases new Management API versions monthly. The nightly version checker workflow (future implementation) will detect these automatically.
 
 **⚠️ Supply Chain Security Warning:**
 
