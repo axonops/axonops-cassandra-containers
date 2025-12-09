@@ -11,6 +11,9 @@ Container build definitions and CI/CD pipelines for AxonOps container images.
 - [Components](#components)
 - [Repository Conventions](#repository-conventions)
 - [Getting Started](#getting-started)
+- [Security](#security)
+  - [CVE Policy](#cve-policy)
+  - [Gold Standard Security Deployment](#gold-standard-security-deployment)
 - [Development](#development)
 - [Releasing](#releasing)
   - [Development Publishing](#development-publishing)
@@ -38,6 +41,225 @@ Container build definitions and CI/CD pipelines for AxonOps container images.
 Each component has its own documentation with detailed instructions:
 
 - [K8ssandra Documentation](./k8ssandra/README.md)
+
+## Security
+
+### CVE Policy
+
+**Immutable Tagging:** All container images use immutable versioning. When CVEs are discovered and patched, we release NEW versions rather than overwriting existing tags.
+
+**Version Increments:**
+- Critical CVEs (CRITICAL, HIGH severity): Immediate patch release (e.g., `1.0.3` → `1.0.4`)
+- Non-critical CVEs (MEDIUM, LOW): Batched into monthly releases
+- Patch version increments may include: CVE fixes, component updates (e.g., AxonOps agent), bug fixes, or feature additions
+
+**Latest Tag Behavior:**
+- `latest` tag always points to the most recent secure version
+- Provides automatic security updates when using latest tag
+- **NOT recommended for production** - use specific versions instead
+
+**Production Deployment:**
+- Always pin to specific immutable versions (e.g., `5.0.6-1.0.4`)
+- Never use `latest`, `5.0-latest`, or `{version}-latest` tags in production
+- Review release notes before upgrading
+- Test upgrades in non-production environments first
+
+**CVE Notifications:**
+- Automated nightly security scans with Trivy
+- Email notifications for new CRITICAL/HIGH CVEs
+- Transparent disclosure in release notes
+
+**For highest security environments**, see [Gold Standard Security Deployment](#gold-standard-security-deployment).
+
+---
+
+### Gold Standard Security Deployment
+
+**Digest-Based Deployment** provides the highest level of security and immutability for container deployments.
+
+#### What is Digest-Based Deployment?
+
+Instead of using tags (which can be mutable), deploy using the image's SHA256 digest:
+
+```yaml
+# Tag-based (good)
+image: ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4
+
+# Digest-based (best)
+image: ghcr.io/axonops/k8ssandra/cassandra@sha256:412c85225...
+```
+
+#### Benefits
+
+✅ **100% Immutable** - Guaranteed exact same image every time, forever
+
+✅ **Survives Tag Manipulation** - Unaffected if tags are accidentally or maliciously changed
+
+✅ **Compliance Ready** - Meets requirements for regulated environments (finance, healthcare, government)
+
+✅ **Audit Trail** - Digest in deployment manifest provides cryptographic proof of exact image
+
+✅ **Supply Chain Security** - Combined with signature verification, provides complete provenance
+
+#### Finding Image Digests
+
+**Method 1: From GHCR UI**
+1. Navigate to package: https://github.com/axonops/axonops-containers/pkgs/container/k8ssandra%2Fcassandra
+2. Click on specific version
+3. Copy SHA256 digest shown
+
+**Method 2: Using Docker/Podman**
+```bash
+# Pull the image first
+docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4
+
+# Get digest
+docker inspect ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4 \
+  --format='{{index .RepoDigests 0}}'
+
+# Output: ghcr.io/axonops/k8ssandra/cassandra@sha256:412c85225...
+```
+
+**Method 3: During Workflow**
+- Check GitHub Actions workflow logs after publishing
+- Digest printed in build output
+
+#### Kubernetes Deployment Example
+
+**K8ssandraCluster manifest:**
+```yaml
+apiVersion: k8ssandra.io/v1alpha1
+kind: K8ssandraCluster
+metadata:
+  name: production-cluster
+spec:
+  cassandra:
+    serverVersion: "5.0.6"
+    # Use digest instead of tag
+    serverImage: "ghcr.io/axonops/k8ssandra/cassandra@sha256:412c852252ec4ebcb8d377a505881828a7f6a5f9dc725cc4f20fda2a1bcb3494"
+    datacenters:
+      - metadata:
+          name: dc1
+        size: 3
+        # ... rest of configuration
+```
+
+#### Verifying Signatures
+
+All images published to GHCR are signed with [Sigstore Cosign](https://github.com/sigstore/cosign) using keyless signing.
+
+**Standard Verification:**
+```bash
+# Install cosign
+brew install sigstore/tap/cosign  # macOS
+# or: https://docs.sigstore.dev/cosign/installation/
+
+# Verify signature
+cosign verify \
+  --certificate-identity-regexp='https://github.com/axonops/axonops-containers' \
+  --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
+  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4
+
+# Check signature exists
+cosign tree ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4
+```
+
+**Troubleshooting (macOS Issues):**
+
+If you encounter issues with local cosign on macOS, use the official Cosign container image:
+
+```bash
+# Using Docker
+docker run --rm gcr.io/projectsigstore/cosign:v2.4.1 verify \
+  --certificate-identity-regexp='https://github.com/axonops/axonops-containers' \
+  --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
+  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4
+
+# Using Podman
+podman run --rm gcr.io/projectsigstore/cosign:v2.4.1 verify \
+  --certificate-identity-regexp='https://github.com/axonops/axonops-containers' \
+  --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
+  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4
+```
+
+This uses the [official Cosign container](https://github.com/sigstore/cosign) and works reliably across all platforms.
+
+**Successful verification proves:**
+- ✅ Image was built by official GitHub Actions workflow
+- ✅ Image has not been tampered with
+- ✅ Build provenance is traceable to specific commit and workflow run
+
+#### Enforcing Signed Images in Kubernetes
+
+For production environments requiring signature verification before deployment:
+
+**Policy Enforcement Tools:**
+- **Kyverno** - Kubernetes native policy engine
+- **OPA Gatekeeper** - Open Policy Agent for Kubernetes
+- **Sigstore Policy Controller** - Official Sigstore admission controller
+
+**Example: Kyverno Policy**
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-axonops-images
+spec:
+  validationFailureAction: Enforce
+  rules:
+    - name: verify-signature
+      match:
+        resources:
+          kinds:
+            - Pod
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/axonops/*"
+          attestors:
+            - entries:
+                - keyless:
+                    subject: "https://github.com/axonops/axonops-containers/*"
+                    issuer: "https://token.actions.githubusercontent.com"
+```
+
+**Cloud Provider Support:**
+- **AWS EKS** - Use Kyverno or OPA Gatekeeper via Helm
+- **Google GKE** - Binary Authorization with Cosign attestations
+- **Azure AKS** - Azure Policy with Ratify + Cosign
+- **Rancher/RKE** - Kyverno or OPA Gatekeeper via Rancher Apps
+
+For detailed setup, see your Kubernetes distribution's documentation on admission controllers and image policy enforcement.
+
+#### Best Practices
+
+**For Production Clusters:**
+1. ✅ Use digest-based deployment
+2. ✅ Verify signatures before deployment (signed images)
+3. ✅ Pin digest in version control (GitOps)
+4. ✅ Document digest → version mapping in release notes
+5. ✅ Update digests only after testing in non-production
+
+**For Development/Testing:**
+- Tag-based deployment is acceptable for faster iteration
+- Use development image registry for testing
+
+**Updating Digests:**
+```bash
+# 1. Pull new version
+docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.5
+
+# 2. Get new digest
+NEW_DIGEST=$(docker inspect ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.5 \
+  --format='{{index .RepoDigests 0}}' | cut -d@ -f2)
+
+# 3. Update manifest
+sed -i "s|@sha256:.*|@${NEW_DIGEST}\"|" k8ssandra-cluster.yaml
+
+# 4. Review, test, and commit
+git diff k8ssandra-cluster.yaml
+```
+
+---
 
 ## Development
 
@@ -153,9 +375,9 @@ brew install gh
 gh auth login
 ```
 
-Trigger the workflow:
+Trigger the signed publish workflow:
 ```bash
-gh workflow run <component>-publish.yml \
+gh workflow run <component>-publish-signed.yml \
   -f main_git_tag=1.0.0 \
   -f container_version=1.0.0
 ```
@@ -163,6 +385,8 @@ gh workflow run <component>-publish.yml \
 **Arguments explained:**
 - `-f main_git_tag=1.0.0` - The git tag on main branch to checkout and build (the tag you created in Step 1)
 - `-f container_version=1.0.0` - The container version for GHCR images (e.g., creates `5.0.6-1.0.0`)
+
+**Note:** Use the `-signed` workflows (`k8ssandra-publish-signed.yml`) for new releases. These publish to the new image paths with cryptographic signatures. Old workflows remain for backward compatibility but are deprecated.
 
 Monitor progress:
 ```bash
@@ -184,24 +408,39 @@ gh run watch
 
 **Step 3: Workflow Execution**
 
-The workflow will:
+The signed publish workflow will:
 - Validate tag is on main branch (fails if not)
 - Validate `container_version` doesn't exist in GHCR (fails if duplicate)
 - Checkout the `main_git_tag` commit (exact code snapshot)
 - Run full test suite
 - Build multi-arch images (amd64, arm64)
-- Publish to GHCR with tags like `5.0.6-<container_version>`
-- Create GitHub Release named `<component>-<container_version>`
+- Push to GHCR with multi-dimensional tags
+- **Sign images** with Sigstore Cosign (keyless, GitHub OIDC)
+- Re-push tags to ensure proper GHCR UI display
+- Create GitHub Release named `<component>-signed-<container_version>`
+
+**Images are signed** using keyless signing with transparency log entries. Signatures can be verified with `cosign verify` (see [Verifying Signatures](#verifying-signatures)).
 
 **Step 4: Verify Release**
 
 ```bash
 # View GitHub Release
-gh release view k8ssandra-1.0.0
+gh release view k8ssandra-signed-1.0.0
 
 # Pull and test image
-docker pull ghcr.io/axonops/axonops-cassandra-containers:5.0.6-1.0.0
+docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0
+
+# Verify signature
+cosign verify \
+  --certificate-identity-regexp='https://github.com/axonops/axonops-containers' \
+  --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
+  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0
+
+# Or check signature exists
+cosign tree ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0
 ```
+
+All production images are cryptographically signed. Signature verification proves the image was built by official workflows and has not been tampered with. See [Gold Standard Security Deployment](#gold-standard-security-deployment) for more details.
 
 ### Component Release Documentation
 

@@ -1,6 +1,6 @@
 # AxonOps K8ssandra Containers
 
-[![GHCR Package](https://img.shields.io/badge/GHCR-Package-blue?logo=docker)](https://github.com/axonops/axonops-containers/pkgs/container/axonops-cassandra-containers)
+[![GHCR Package](https://img.shields.io/badge/GHCR-Package-blue?logo=docker)](https://github.com/axonops/axonops-containers/pkgs/container/k8ssandra%2Fcassandra)
 
 Docker containers for Apache Cassandra with integrated AxonOps monitoring and management agent, designed for deployment on Kubernetes using K8ssandra Operator.
 
@@ -46,7 +46,8 @@ Images use a multi-dimensional tagging strategy for flexibility:
 
 | Tag Pattern | Example | Description | Use Case |
 |-------------|---------|-------------|----------|
-| `{CASSANDRA_VERSION}-{AXONOPS_VERSION}` | `5.0.6-1.0.0` | Immutable, specific version | **Production**: Pin exact versions for auditability |
+| `{CASSANDRA_VERSION}-{AXONOPS_VERSION}` | `5.0.6-1.0.4` | Immutable, specific version | **Production**: Pin exact versions for auditability |
+| `@sha256:<digest>` | `@sha256:412c852...` | Digest-based (immutable) | **Highest Security**: Cryptographically guaranteed image (see [Gold Standard Security](../README.md#gold-standard-security-deployment)) |
 | `{CASSANDRA_VERSION}-latest` | `5.0.6-latest` | Latest AxonOps version for this Cassandra patch | Track AxonOps updates for a specific Cassandra patch |
 | `{CASSANDRA_MINOR}-latest` | `5.0-latest` | Latest patch in this Cassandra minor line | Track latest Cassandra patch in a major version (currently 5.0.6) |
 | `latest` | `latest` | Latest across all versions | Quick trials and documentation (currently 5.0.6) |
@@ -67,7 +68,7 @@ When version `5.0.6-1.0.1` is built, it gets tagged as:
 **Future Support:**
 - **4.0.x and 4.1.x:** Available in repository but not yet published due to AxonOps agent compatibility issues. Reach out if you need these versions.
 
-Browse all available tags: [GitHub Container Registry](https://github.com/axonops/axonops-containers/pkgs/container/axonops-cassandra-containers)
+Browse all available tags: [GitHub Container Registry](https://github.com/axonops/axonops-containers/pkgs/container/k8ssandra%2Fcassandra)
 
 ## 💡 Production Best Practice
 
@@ -77,10 +78,33 @@ Browse all available tags: [GitHub Container Registry](https://github.com/axonop
 - **Rollback difficulties**: You cannot reliably roll back to a previous version
 - **Compliance issues**: Many compliance frameworks require immutable version tracking
 
-👍 **Always use immutable tags in production** (e.g., `5.0.6-1.0.1`). Use latest tags only for:
-- Local development and testing
-- Documentation examples
-- Quick proof-of-concept deployments
+👍 **Recommended Deployment Strategies (in order of security):**
+
+1. **🥇 Gold Standard - Digest-Based** (Highest Security)
+   ```yaml
+   serverImage: "ghcr.io/axonops/k8ssandra/cassandra@sha256:412c852252ec4ebcb8d377a505881828a7f6a5f9dc725cc4f20fda2a1bcb3494"
+   ```
+   - 100% immutable, cryptographically guaranteed
+   - Required for regulated environments
+   - See [Gold Standard Security Deployment](../README.md#gold-standard-security-deployment)
+
+2. **🥈 Immutable Tag** (Production Standard)
+   ```yaml
+   serverImage: "ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.4"
+   ```
+   - Pinned to specific version
+   - Easy to read and manage
+   - Audit trail maintained
+
+3. **🥉 Latest Tags** (Development/Testing Only)
+   ```yaml
+   serverImage: "ghcr.io/axonops/k8ssandra/cassandra:latest"
+   ```
+   - Fast iteration
+   - NOT for production
+   - Use for POCs and testing only
+
+**CVE Management:** See [CVE Policy](../README.md#cve-policy) for how we handle security vulnerabilities and version releases.
 
 **Image Updates with K8ssandra:** When you update the container image in your K8ssandraCluster manifest, the K8ssandra Operator handles the rolling update process. See the [K8ssandra Operator documentation](https://docs.k8ssandra.io/) for details on upgrade procedures and best practices.
 
@@ -90,7 +114,7 @@ Run a single-node Cassandra instance locally:
 
 ```bash
 # Pull the image
-docker pull ghcr.io/axonops/axonops-cassandra-containers:5.0.6-1.0.0
+docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0
 
 # Run with AxonOps agent (replace with your credentials)
 docker run -d --name cassandra \
@@ -99,7 +123,7 @@ docker run -d --name cassandra \
   -e AXON_AGENT_HOST="agents.axonops.cloud" \
   -p 9042:9042 \
   -p 8080:8080 \
-  ghcr.io/axonops/axonops-cassandra-containers:5.0.6-1.0.0
+  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0
 
 # Wait for Cassandra to be ready (check Management API)
 curl http://localhost:8080/api/v0/probes/readiness
@@ -113,7 +137,7 @@ docker exec -it cassandra cqlai
 For Kubernetes deployments, use the image with K8ssandra Operator:
 
 ```bash
-export IMAGE_NAME="ghcr.io/axonops/axonops-cassandra-containers:5.0.6-1.0.0"
+export IMAGE_NAME="ghcr.io/axonops/k8ssandra/cassandra:5.0.6-1.0.0"
 export AXON_AGENT_KEY="your-key"
 export AXON_AGENT_ORG="your-org"
 export AXON_AGENT_HOST="agents.axonops.cloud"
@@ -536,10 +560,10 @@ For complete release instructions, see [RELEASE.md](./RELEASE.md)
 Each release uses multi-dimensional tagging:
 
 ```
-ghcr.io/axonops/axonops-cassandra-containers:{CASSANDRA_VERSION}-{AXONOPS_VERSION}  # Immutable
-ghcr.io/axonops/axonops-cassandra-containers:{CASSANDRA_VERSION}-latest             # Patch-level latest
-ghcr.io/axonops/axonops-cassandra-containers:5.0-latest                             # Minor-level latest
-ghcr.io/axonops/axonops-cassandra-containers:latest                                 # Global latest
+ghcr.io/axonops/k8ssandra/cassandra:{CASSANDRA_VERSION}-{AXONOPS_VERSION}  # Immutable
+ghcr.io/axonops/k8ssandra/cassandra:{CASSANDRA_VERSION}-latest             # Patch-level latest
+ghcr.io/axonops/k8ssandra/cassandra:5.0-latest                             # Minor-level latest
+ghcr.io/axonops/k8ssandra/cassandra:latest                                 # Global latest
 ```
 
 **Example:** For AxonOps release `1.0.1`, a total of 14 tags published:
