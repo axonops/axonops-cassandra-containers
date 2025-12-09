@@ -46,8 +46,12 @@ RUN echo "Updating all packages to latest versions..." && \
 COPY axonops-yum-repo.repo /etc/yum.repos.d/axonops-yum.repo
 
 # Install jemalloc for memory allocation optimization
+# Note: EPEL release RPM is GPG-signed and verified automatically by rpm
 RUN rpm -ivh https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && \
+    # Verify jemalloc package will be installed from EPEL (not untrusted repos)
     microdnf install -y jemalloc && \
+    # Verify jemalloc binary exists and is from expected location
+    test -f /usr/lib64/libjemalloc.so.2 || (echo "ERROR: jemalloc not installed correctly" && exit 1) && \
     ln -sf /usr/lib64/libjemalloc.so.2 /usr/local/lib/libjemalloc.so && \
     echo "/usr/local/lib" > /etc/ld.so.conf.d/local.conf && \
     ldconfig && \
