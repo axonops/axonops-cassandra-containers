@@ -106,7 +106,7 @@ FROM docker.io/k8ssandra/cass-management-api:5.0.6-ubi  # ❌ Mutable tag!
 
 ### Publishing
 - Publish to GHCR: `ghcr.io/axonops/<image-name>:<tag>`
-- Tag format: `<version>-<release>` (e.g., `5.0.6-1.0.0`)
+- Tag format: `{CASS}-v{K8S_API}-{AXON}` (e.g., `5.0.6-v0.1.110-1.0.5`)
 - Multi-arch manifests required for all published images
 - Only publish on version tags (semantic versioning)
 
@@ -155,12 +155,12 @@ Every workflow must include:
 - Production-ready code only
 - Protected: requires PR approval, no direct pushes
 - Only accepts merges from `development` branch
-- Releases published to: `ghcr.io/axonops/axonops-cassandra-containers`
+- Releases published to: `ghcr.io/axonops/<component>/<image-name>` (e.g., `ghcr.io/axonops/k8ssandra/cassandra`)
 
 **`development` - Integration Branch**
 - Default branch for all development work
 - Developers commit directly (no PR required)
-- Releases published to: `ghcr.io/axonops/development-axonops-cassandra-containers`
+- Releases published to: `ghcr.io/axonops/development/<component>/<image-name>` (e.g., `ghcr.io/axonops/development/k8ssandra/cassandra`)
 - Testing ground before promoting to production
 
 **`feature/<name>` - Feature Branches (Optional)**
@@ -284,7 +284,7 @@ Each component should have three workflows:
 - Inputs: `dev_git_tag`, `container_version`
 - Validates: Tag is on development branch
 - Runs: Full test suite on tagged code
-- Publishes: Multi-arch images to `ghcr.io/axonops/development-<image-name>`
+- Publishes: Multi-arch images to `ghcr.io/axonops/development/<component>/<image-name>`
 - No version validation (allows overwrites for iterative testing)
 - Does NOT create GitHub Releases
 
@@ -316,14 +316,14 @@ Publish development images for testing before production release:
    ```
 
 3. **Images published to development registry**
-   - Registry: `ghcr.io/axonops/development-<image-name>`
-   - Example: `ghcr.io/axonops/development-axonops-cassandra-containers:5.0.6-dev-1.0.0`
+   - Registry: `ghcr.io/axonops/development/<component>/<image-name>`
+   - Example: `ghcr.io/axonops/development/k8ssandra/cassandra:5.0.6-v0.1.110-dev-1.0.0`
    - Can be overwritten (no version validation)
    - No GitHub Release created
 
 4. **Test development images**
    ```bash
-   docker pull ghcr.io/axonops/development-<image>:<version>-dev-1.0.0
+   docker pull ghcr.io/axonops/development/<component>/<image>:<version>-v<k8s-api>-dev-1.0.0
    # Run tests, validate functionality
    ```
 
