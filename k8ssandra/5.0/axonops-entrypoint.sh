@@ -82,7 +82,10 @@ fi
 
 # Add AxonOps JVM options to cassandra-env.sh
 echo ". /usr/share/axonops/axonops-jvm.options" >> /opt/cassandra/conf/cassandra-env.sh
-echo ". /usr/share/axonops/axonops-jvm.options" >> /config/cassandra-env.sh
+# Also add to /config if it exists (K8ssandra operator mounts config here)
+if [ -f /config/cassandra-env.sh ]; then
+    echo ". /usr/share/axonops/axonops-jvm.options" >> /config/cassandra-env.sh
+fi
 
 # Print startup banner (after config ready, before starting Cassandra)
 print_startup_banner

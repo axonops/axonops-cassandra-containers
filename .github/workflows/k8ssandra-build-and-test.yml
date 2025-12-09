@@ -86,6 +86,11 @@ jobs:
         with:
           container_name: cassandra-test
 
+      - name: Verify no startup errors
+        uses: ./.github/actions/k8ssandra-verify-no-startup-errors
+        with:
+          container_name: cassandra-test
+
       - name: Verify versions (jemalloc, Cassandra, Java)
         uses: ./.github/actions/k8ssandra-verify-versions
         with:
@@ -197,6 +202,11 @@ jobs:
 
       - name: Start container and wait for services
         uses: ./.github/actions/k8ssandra-start-and-wait
+        with:
+          container_name: cassandra-test
+
+      - name: Verify no startup errors
+        uses: ./.github/actions/k8ssandra-verify-no-startup-errors
         with:
           container_name: cassandra-test
 
