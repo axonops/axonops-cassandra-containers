@@ -117,7 +117,7 @@ done
 echo "✓ Configuration applied to cassandra.yaml"
 echo ""
 
-# jemalloc is pre-loaded via LD_PRELOAD ENV set in Dockerfile
+# jemalloc LD_PRELOAD is set via ENV in Dockerfile
 # JVM options are set in jvm17-server.options (including Shenandoah GC)
 
 echo ""
