@@ -112,6 +112,10 @@ RUN (for dir in ${CASSANDRA_DATA_DIR} \
 COPY scripts/healthcheck.sh /usr/local/bin/healthcheck.sh
 RUN chmod 755 /usr/local/bin/healthcheck.sh
 
+# Copy system keyspace initialization script
+COPY scripts/init-system-keyspaces.sh /usr/local/bin/init-system-keyspaces.sh
+RUN chmod 755 /usr/local/bin/init-system-keyspaces.sh
+
 # Generate build info
 RUN mkdir -p /etc/axonops && \
     echo "CASSANDRA_VERSION=\"${CASSANDRA_VERSION}\"" > /etc/axonops/build-info.txt && \
