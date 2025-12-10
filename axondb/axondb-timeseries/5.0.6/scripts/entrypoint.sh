@@ -31,6 +31,7 @@ if [ -f /etc/axonops/build-info.txt ]; then
     echo "Component Versions:"
     echo "  Cassandra:          ${CASSANDRA_VERSION:-unknown}"
     echo "  Java:               ${JAVA_VERSION:-unknown}"
+    echo "  cqlai:              ${CQLAI_VERSION:-unknown}"
     echo "  Jemalloc:           ${JEMALLOC_VERSION:-unknown}"
     echo "  OS:                 ${OS_VERSION:-unknown}"
     echo "  Platform:           ${PLATFORM:-unknown}"
@@ -43,7 +44,7 @@ export CASSANDRA_CLUSTER_NAME="${CASSANDRA_CLUSTER_NAME:-axonopsdb-timeseries}"
 export CASSANDRA_NUM_TOKENS="${CASSANDRA_NUM_TOKENS:-8}"
 export CASSANDRA_LISTEN_ADDRESS="${CASSANDRA_LISTEN_ADDRESS:-auto}"
 export CASSANDRA_RPC_ADDRESS="${CASSANDRA_RPC_ADDRESS:-0.0.0.0}"
-export CASSANDRA_DC="${CASSANDRA_DC:-dc1}"
+export CASSANDRA_DC="${CASSANDRA_DC:-axonopsdb_dc1}"
 export CASSANDRA_RACK="${CASSANDRA_RACK:-rack1}"
 
 # JVM heap settings
@@ -103,12 +104,8 @@ else
     echo "⚠ jemalloc not found, continuing without it"
 fi
 
-# Set JVM options for Shenandoah GC
-export JVM_OPTS="$JVM_OPTS -Xms${CASSANDRA_HEAP_SIZE}"
-export JVM_OPTS="$JVM_OPTS -Xmx${CASSANDRA_HEAP_SIZE}"
-export JVM_OPTS="$JVM_OPTS -Xmn${CASSANDRA_HEAP_NEWSIZE}"
-export JVM_OPTS="$JVM_OPTS -XX:+UseShenandoahGC"
-export JVM_OPTS="$JVM_OPTS -XX:+AlwaysPreTouch"
+# JVM options are set in jvm17-server.options (including Shenandoah GC)
+# Additional runtime options can be added here if needed
 
 echo ""
 echo "=== Starting Cassandra ==="

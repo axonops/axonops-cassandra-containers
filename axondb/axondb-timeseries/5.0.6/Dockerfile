@@ -38,7 +38,7 @@ LABEL org.opencontainers.image.revision="${VCS_REF}"
 LABEL org.opencontainers.image.vendor="AxonOps"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.title="AxonDB Time-Series - Apache Cassandra ${CASSANDRA_VERSION}"
-LABEL org.opencontainers.image.description="Apache Cassandra ${CASSANDRA_VERSION} optimized for AxonOps self-hosting and time-series workloads with Azul OpenJDK 17 Shenandoah GC, jemalloc, and production-grade configuration. Multi-arch (amd64/arm64) for Kubernetes deployments."
+LABEL org.opencontainers.image.description="Apache Cassandra ${CASSANDRA_VERSION} optimized for time-series workloads with Azul OpenJDK 17 Shenandoah GC, cqlai v${CQLAI_VERSION}, jemalloc, and production-grade configuration. Multi-arch (amd64/arm64) for Kubernetes deployments."
 LABEL org.opencontainers.image.ref.name="${IMAGE_FULL_NAME}"
 LABEL org.opencontainers.image.base.name="docker.io/cassandra:${CASSANDRA_VERSION}"
 LABEL org.opencontainers.image.base.digest="${CASSANDRA_BASE_DIGEST}"
@@ -46,6 +46,7 @@ LABEL org.opencontainers.image.base.digest="${CASSANDRA_BASE_DIGEST}"
 # AxonOps-specific labels (com.axonops.* namespace)
 LABEL com.axonops.component="axondb-timeseries"
 LABEL com.axonops.cassandra.version="${CASSANDRA_VERSION}"
+LABEL com.axonops.cqlai.version="${CQLAI_VERSION}"
 LABEL com.axonops.build.actor="${GITHUB_ACTOR}"
 
 USER root
@@ -92,7 +93,25 @@ RUN echo "Installing jemalloc..." && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# No need for gettext-base - base image's docker-entrypoint.sh handles env var substitution
+# Install cqlai (pinned version - must be provided as build arg)
+ARG CQLAI_VERSION
+RUN if [ -z "$CQLAI_VERSION" ]; then \
+      echo "ERROR: CQLAI_VERSION build arg is required"; \
+      exit 1; \
+    fi && \
+    echo "Installing cqlai version: $CQLAI_VERSION" && \
+    DEB_ARCH=$([ "$TARGETARCH" = "amd64" ] && echo "amd64" || echo "arm64") && \
+    CQLAI_DEB="cqlai_${CQLAI_VERSION}_${DEB_ARCH}.deb" && \
+    CQLAI_URL="https://github.com/axonops/cqlai/releases/download/v${CQLAI_VERSION}" && \
+    # Download checksums file and DEB
+    curl -sL -o SHA256SUMS.txt "${CQLAI_URL}/SHA256SUMS.txt" && \
+    curl -sL -o "${CQLAI_DEB}" "${CQLAI_URL}/${CQLAI_DEB}" && \
+    # Verify checksum
+    grep "${CQLAI_DEB}" SHA256SUMS.txt | sha256sum -c - && \
+    # Install DEB
+    dpkg -i "${CQLAI_DEB}" && \
+    # Cleanup
+    rm -f "${CQLAI_DEB}" SHA256SUMS.txt
 
 # Copy customized Cassandra configuration files
 # Our custom cassandra.yaml becomes the default config
@@ -122,6 +141,7 @@ RUN echo "CONTAINER_VERSION=\"${VERSION}\"" > /etc/axonops/build-info.txt && \
     echo "IS_PRODUCTION_RELEASE=\"${IS_PRODUCTION_RELEASE}\"" >> /etc/axonops/build-info.txt && \
     echo "CASSANDRA_VERSION=\"${CASSANDRA_VERSION}\"" >> /etc/axonops/build-info.txt && \
     echo "JAVA_VERSION=\"$(java -version 2>&1 | head -2 | tail -1 || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
+    echo "CQLAI_VERSION=\"$(cqlai --version 2>&1 | head -1 | awk '{print $NF}' || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
     echo "JEMALLOC_VERSION=\"$(dpkg -l | grep libjemalloc2 | awk '{print $3}' || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
     echo "OS_VERSION=\"$(grep PRETTY_NAME /etc/os-release 2>/dev/null | sed 's/.*="\(.*\)"/\1/' || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
     echo "PLATFORM=\"$(uname -m || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
