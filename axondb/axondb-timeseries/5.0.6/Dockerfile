@@ -32,7 +32,7 @@ ARG CQLAI_VERSION
 ENV CASSANDRA_VERSION=${CASSANDRA_VERSION}
 
 LABEL maintainer="AxonOps"
-LABEL name="AxonDB Time-Series Database"
+LABEL name="AxonOps version of Apache Cassandra for Time-Series Database for use with AxonOps self-hosting"
 LABEL vendor="AxonOps"
 LABEL release="${CASSANDRA_VERSION}"
 LABEL summary="Apache Cassandra is an open source distributed database management system designed to handle large amounts of data across many commodity servers, providing high availability with no single point of failure. Cassandra offers robust support for clusters spanning multiple datacenters, with asynchronous masterless replication allowing low latency operations for all clients."
