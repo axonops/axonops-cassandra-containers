@@ -56,6 +56,7 @@ RUN microdnf install -y --nodocs shadow-utils && \
 # iproute: network configuration tools
 # numactl: NUMA support (auto-detected by Cassandra)
 # nmap-ncat: provides nc for init script port checks
+# curl: required for cqlai downloads
 RUN microdnf install -y --nodocs \
     java-17-openjdk-headless \
     tzdata-java \
@@ -72,6 +73,7 @@ RUN microdnf install -y --nodocs \
     tar \
     gzip \
     wget \
+    curl \
     && microdnf clean all \
     && rm -rf /var/cache/yum /var/cache/dnf
 
@@ -109,7 +111,7 @@ RUN if [ -z "$CQLAI_VERSION" ]; then \
       exit 1; \
     fi && \
     echo "Installing cqlai version: $CQLAI_VERSION" && \
-    RPM_ARCH=$(uname -m) && \
+    RPM_ARCH=$([ "$TARGETARCH" = "amd64" ] && echo "x86_64" || echo "aarch64") && \
     CQLAI_RPM="cqlai-${CQLAI_VERSION}-1.${RPM_ARCH}.rpm" && \
     CQLAI_URL="https://github.com/axonops/cqlai/releases/download/v${CQLAI_VERSION}" && \
     curl -sL -o /tmp/SHA256SUMS.txt "${CQLAI_URL}/SHA256SUMS.txt" && \
@@ -154,9 +156,17 @@ RUN chmod 755 /usr/local/bin/docker-entrypoint.sh && \
 
 # Tini init system (minimal init for containers - handles signals and prevents zombies)
 RUN TINI_VERSION=v0.19.0 && \
-    ARCH=$(uname -m) && \
-    if [ "$ARCH" = "x86_64" ]; then TINI_ARCH="amd64"; elif [ "$ARCH" = "aarch64" ]; then TINI_ARCH="arm64"; else TINI_ARCH="$ARCH"; fi && \
+    if [ "$TARGETARCH" = "amd64" ]; then \
+        TINI_ARCH="amd64"; \
+        TINI_SHA256="93dcc18adc78c65a028a84799ecf8ad40c936fdfc5f2a57b1acda5a8117fa82c"; \
+    elif [ "$TARGETARCH" = "arm64" ]; then \
+        TINI_ARCH="arm64"; \
+        TINI_SHA256="07952557df20bfd2a95f9bef198b445e006171969499a1d361bd9e6f8e5e0e81"; \
+    else \
+        echo "ERROR: Unsupported architecture: $TARGETARCH" && exit 1; \
+    fi && \
     wget -q -O /tini "https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini-${TINI_ARCH}" && \
+    echo "${TINI_SHA256}  /tini" | sha256sum -c - && \
     chmod +x /tini
 
 # Set user to run as
