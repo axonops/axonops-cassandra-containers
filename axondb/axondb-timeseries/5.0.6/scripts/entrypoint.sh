@@ -105,14 +105,23 @@ for yaml in cluster_name num_tokens listen_address rpc_address broadcast_address
     fi
 done
 
-# Apply DC/Rack to cassandra-rackdc.properties
+# Apply DC/Rack to cassandra-rackdc.properties (handle space after =)
 for rackdc in dc rack; do
     var="CASSANDRA_${rackdc^^}"
     val="${!var}"
     if [ "$val" ]; then
-        _sed-in-place "/etc/cassandra/cassandra-rackdc.properties" -r 's/^('"$rackdc"'=).*/\1 '"$val"'/'
+        _sed-in-place "/etc/cassandra/cassandra-rackdc.properties" -r 's/^('"$rackdc"')\s*=.*/\1='"$val"'/'
     fi
 done
+
+# Apply heap size overrides to jvm17-server.options if env vars set
+if [ -n "$CASSANDRA_HEAP_SIZE" ]; then
+    _sed-in-place "/etc/cassandra/jvm17-server.options" -r 's/^-Xms[0-9]+[GgMm]$/-Xms'"$CASSANDRA_HEAP_SIZE"'/'
+    _sed-in-place "/etc/cassandra/jvm17-server.options" -r 's/^-Xmx[0-9]+[GgMm]$/-Xmx'"$CASSANDRA_HEAP_SIZE"'/'
+fi
+if [ -n "$CASSANDRA_HEAP_NEWSIZE" ]; then
+    _sed-in-place "/etc/cassandra/jvm17-server.options" -r 's/^-Xmn[0-9]+[GgMm]$/-Xmn'"$CASSANDRA_HEAP_NEWSIZE"'/'
+fi
 
 echo "✓ Configuration applied to cassandra.yaml"
 echo ""
