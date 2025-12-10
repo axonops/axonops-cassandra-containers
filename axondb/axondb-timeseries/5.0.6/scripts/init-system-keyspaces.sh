@@ -12,35 +12,57 @@ echo "AxonOps System Keyspace Initialization (Cassandra 5.0.6)"
 echo "=========================================================="
 
 # ============================================================================
-# 1. Wait for CQL to be ready (local node listening on 9042)
+# 1. Wait for CQL port to be listening
 # ============================================================================
-echo "Waiting for CQL to be ready..."
+# Get native transport port from cassandra.yaml (default 9042)
+CQL_PORT=$(grep '^native_transport_port:' /etc/cassandra/cassandra.yaml | awk '{print $2}' || echo "9042")
+
+echo "Waiting for CQL port $CQL_PORT to be listening..."
 MAX_WAIT=300  # 5 minutes
 ELAPSED=0
 
-until cqlsh -u cassandra -p cassandra -e "SELECT now() FROM system.local" > /dev/null 2>&1; do
+until nc -z localhost "$CQL_PORT" 2>/dev/null; do
   if [ $ELAPSED -gt $MAX_WAIT ]; then
-    echo "⚠ CQL did not become ready within ${MAX_WAIT}s, skipping system keyspace init"
+    echo "⚠ CQL port did not open within ${MAX_WAIT}s, skipping system keyspace init"
     exit 0
   fi
-  sleep 5
-  ELAPSED=$((ELAPSED + 5))
+  sleep 2
+  ELAPSED=$((ELAPSED + 2))
 done
+
+echo "✓ CQL port $CQL_PORT is listening"
+
+# ============================================================================
+# 2. Wait for native transport and gossip to be enabled
+# ============================================================================
+echo "Waiting for native transport and gossip to be enabled..."
+ELAPSED=0
+
+until nodetool info 2>/dev/null | grep -q "Native Transport active: true" && \
+      nodetool info 2>/dev/null | grep -q "Gossip active: true"; do
+  if [ $ELAPSED -gt $MAX_WAIT ]; then
+    echo "⚠ Native transport/gossip did not become ready within ${MAX_WAIT}s, skipping"
+    exit 0
+  fi
+  sleep 2
+  ELAPSED=$((ELAPSED + 2))
+done
+
+echo "✓ Native transport and gossip are active"
+
+# ============================================================================
+# 3. Verify CQL connectivity with default credentials
+# ============================================================================
+echo "Verifying CQL connectivity..."
+if ! cqlsh -u cassandra -p cassandra -e "SELECT now() FROM system.local LIMIT 1" > /dev/null 2>&1; then
+  echo "⚠ CQL connectivity check failed, skipping system keyspace init"
+  exit 0
+fi
 
 echo "✓ CQL is ready with default credentials"
 
 # ============================================================================
-# 1a. Safety Check: Verify we can authenticate with default cassandra/cassandra
-# ============================================================================
-# If authentication fails, it means credentials have been changed
-# This implies the cluster has been customized - abort safely
-if ! cqlsh -u cassandra -p cassandra -e "SELECT now() FROM system.local" > /dev/null 2>&1; then
-  echo "✓ Default credentials not working - cluster has been customized, skipping initialization"
-  exit 0
-fi
-
-# ============================================================================
-# 2. Check if this is the first node using nodetool status
+# 4. Check if this is the first node using nodetool status
 # ============================================================================
 echo ""
 echo "Checking cluster state..."
@@ -54,7 +76,7 @@ fi
 echo "✓ Single node detected ($NODE_COUNT node)"
 
 # ============================================================================
-# 3. Check replication strategies using nodetool describecluster
+# 5. Check replication strategies using nodetool describecluster
 # ============================================================================
 echo ""
 echo "Checking replication strategies..."
@@ -90,7 +112,7 @@ echo "✓ All checks passed - fresh single-node cluster detected"
 echo "  system_auth: SimpleStrategy RF=$SYSTEM_AUTH_RF"
 
 # ============================================================================
-# 6. All checks passed - proceed with initialization
+# 7. All checks passed - proceed with initialization
 # ============================================================================
 echo ""
 echo "✓ All checks passed. Initializing system keyspaces to NetworkTopologyStrategy..."
@@ -102,7 +124,7 @@ RF="1"
 echo "  Using DC='$DC_NAME', RF=$RF"
 
 # ============================================================================
-# 7. Apply the ALTER KEYSPACE commands
+# 8. Apply the ALTER KEYSPACE commands
 # ============================================================================
 echo ""
 echo "Altering system_auth..."

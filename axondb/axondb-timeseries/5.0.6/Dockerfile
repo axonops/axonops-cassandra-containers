@@ -60,7 +60,7 @@ RUN microdnf install -y --nodocs shadow-utils \
     && useradd -m -d "$CASSANDRA_HOME" -r -g cassandra -G root --uid=999 cassandra \
     && rm -rf /var/cache/yum \
 # Install packages needed during install process
-    && microdnf install -y --nodocs java-17-openjdk-headless tzdata-java python3.11 zlib findutils which hostname iproute procps util-linux glibc-langpack-en wget tar \
+    && microdnf install -y --nodocs java-17-openjdk-headless tzdata-java python3.11 zlib findutils which hostname iproute procps util-linux glibc-langpack-en wget tar nmap-ncat \
     && microdnf clean all
 
 # Install jemalloc from EPEL
