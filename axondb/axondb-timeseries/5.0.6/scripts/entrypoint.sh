@@ -38,17 +38,17 @@ if [ -f /etc/axonops/build-info.txt ]; then
 fi
 
 # Set default environment variables if not provided
-# These will be picked up by the base image's docker-entrypoint.sh
-: ${CASSANDRA_CLUSTER_NAME:=axonopsdb-timeseries}
-: ${CASSANDRA_NUM_TOKENS:=8}
-: ${CASSANDRA_LISTEN_ADDRESS:=auto}
-: ${CASSANDRA_RPC_ADDRESS:=0.0.0.0}
-: ${CASSANDRA_DC:=dc1}
-: ${CASSANDRA_RACK:=rack1}
+# Export them so base image's docker-entrypoint.sh can use them
+export CASSANDRA_CLUSTER_NAME="${CASSANDRA_CLUSTER_NAME:-axonopsdb-timeseries}"
+export CASSANDRA_NUM_TOKENS="${CASSANDRA_NUM_TOKENS:-8}"
+export CASSANDRA_LISTEN_ADDRESS="${CASSANDRA_LISTEN_ADDRESS:-auto}"
+export CASSANDRA_RPC_ADDRESS="${CASSANDRA_RPC_ADDRESS:-0.0.0.0}"
+export CASSANDRA_DC="${CASSANDRA_DC:-dc1}"
+export CASSANDRA_RACK="${CASSANDRA_RACK:-rack1}"
 
 # JVM heap settings
-: ${CASSANDRA_HEAP_SIZE:=2G}
-: ${CASSANDRA_HEAP_NEWSIZE:=512M}
+export CASSANDRA_HEAP_SIZE="${CASSANDRA_HEAP_SIZE:-2G}"
+export CASSANDRA_HEAP_NEWSIZE="${CASSANDRA_HEAP_NEWSIZE:-512M}"
 
 echo "Configuration:"
 echo "  Cluster Name:       ${CASSANDRA_CLUSTER_NAME}"
@@ -58,6 +58,38 @@ echo "  Listen Address:     ${CASSANDRA_LISTEN_ADDRESS}"
 echo "  RPC Address:        ${CASSANDRA_RPC_ADDRESS}"
 echo "  Heap Size:          ${CASSANDRA_HEAP_SIZE}"
 echo "  Heap New Size:      ${CASSANDRA_HEAP_NEWSIZE}"
+echo ""
+
+# Apply environment variable substitutions to cassandra.yaml
+# Copied from base image's docker-entrypoint.sh sed logic
+_sed-in-place() {
+    local filename="$1"; shift
+    local tempFile
+    tempFile="$(mktemp)"
+    sed "$@" "$filename" > "$tempFile"
+    cat "$tempFile" > "$filename"
+    rm "$tempFile"
+}
+
+# Apply CASSANDRA_* environment variables to cassandra.yaml
+for yaml in cluster_name num_tokens listen_address rpc_address broadcast_address broadcast_rpc_address endpoint_snitch; do
+    var="CASSANDRA_${yaml^^}"
+    val="${!var}"
+    if [ "$val" ]; then
+        _sed-in-place "/etc/cassandra/cassandra.yaml" -r 's/^(# )?('"$yaml"':).*/\2 '"$val"'/'
+    fi
+done
+
+# Apply DC/Rack to cassandra-rackdc.properties
+for rackdc in dc rack; do
+    var="CASSANDRA_${rackdc^^}"
+    val="${!var}"
+    if [ "$val" ]; then
+        _sed-in-place "/etc/cassandra/cassandra-rackdc.properties" -r 's/^('"$rackdc"'=).*/\1 '"$val"'/'
+    fi
+done
+
+echo "✓ Configuration applied to cassandra.yaml"
 echo ""
 
 # Enable jemalloc for memory optimization

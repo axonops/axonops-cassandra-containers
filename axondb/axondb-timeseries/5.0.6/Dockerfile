@@ -101,6 +101,11 @@ COPY config/cassandra.yaml /etc/cassandra/cassandra.yaml
 COPY config/jvm-server.options /etc/cassandra/jvm-server.options
 COPY config/jvm17-server.options /etc/cassandra/jvm17-server.options
 
+# Fix ownership so base entrypoint can modify cassandra.yaml for env var substitution
+RUN chown cassandra:cassandra /etc/cassandra/cassandra.yaml \
+    /etc/cassandra/jvm-server.options \
+    /etc/cassandra/jvm17-server.options
+
 # Copy entrypoint and healthcheck scripts
 COPY scripts/entrypoint.sh /usr/local/bin/axondb-entrypoint.sh
 COPY scripts/healthcheck.sh /usr/local/bin/axondb-healthcheck.sh
