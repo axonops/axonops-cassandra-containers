@@ -27,7 +27,17 @@ until cqlsh -u cassandra -p cassandra -e "SELECT now() FROM system.local" > /dev
   ELAPSED=$((ELAPSED + 5))
 done
 
-echo "✓ CQL is ready"
+echo "✓ CQL is ready with default credentials"
+
+# ============================================================================
+# 1a. Safety Check: Verify we can authenticate with default cassandra/cassandra
+# ============================================================================
+# If authentication fails, it means credentials have been changed
+# This implies the cluster has been customized - abort safely
+if ! cqlsh -u cassandra -p cassandra -e "SELECT now() FROM system.local" > /dev/null 2>&1; then
+  echo "✓ Default credentials not working - cluster has been customized, skipping initialization"
+  exit 0
+fi
 
 # ============================================================================
 # 2. Check if this is the first node (system.peers is empty)
