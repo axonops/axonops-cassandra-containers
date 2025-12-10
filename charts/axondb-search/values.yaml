@@ -1,5 +1,5 @@
 ---
-clusterName: "axon-search-cluster"
+clusterName: "axondb-search-cluster"
 nodeGroup: "master"
 
 # If discovery.type in the opensearch configuration is set to "single-node",
@@ -9,7 +9,7 @@ singleNode: true
 
 # The service that non master groups will try to connect to when joining the cluster
 # This should be set to clusterName + "-" + nodeGroup for your master group
-masterService: "axon-search-cluster-master"
+masterService: "axondb-search-cluster-master"
 
 # OpenSearch roles that will be applied to this nodeGroup
 # These will be set as environment variable "node.roles". E.g. node.roles=master,ingest,data,remote_cluster_client

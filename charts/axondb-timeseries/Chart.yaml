@@ -1,6 +1,15 @@
 apiVersion: v2
-name: opensearch
-description: A Helm chart for OpenSearch
+name: axondb-timeseries
+description: This helm chart installs the time series database for AxonOps
+home: https://axonops.com
+icon: https://static.wixstatic.com/media/a5611a_ade5ecd5de154e5381d2e13067f1aec3~mv2.png/v1/fill/w_163,h_47,al_c,usm_1.20_1.00_0.01,enc_auto/tr_logo.png
+keywords:
+  - cassandra
+  - database
+  - storage
+maintainers:
+  - name: AxonOps Team
+    email: info@aoxnops.com
 
 # A chart can be either an 'application' or a 'library' chart.
 #
@@ -15,22 +24,10 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 3.3.2
+version: 0.1.0
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "3.3.2"
-
-maintainers:
-  - name: DandyDeveloper
-  - name: gaiksaya
-  - name: peterzhuamazon
-  - name: prudhvigodithi
-  - name: TheAlgo
-
-home: https://opensearch.org
-sources:
-  - https://github.com/opensearch-project/opensearch
-  - https://github.com/opensearch-project/helm-charts
+appVersion: "5.0.5-1.0.0"
