@@ -40,64 +40,54 @@ if ! cqlsh -u cassandra -p cassandra -e "SELECT now() FROM system.local" > /dev/
 fi
 
 # ============================================================================
-# 2. Check if this is the first node (system.peers is empty)
+# 2. Check if this is the first node using nodetool status
 # ============================================================================
 echo ""
 echo "Checking cluster state..."
-PEER_COUNT=$(cqlsh -u cassandra -p cassandra -e "SELECT count(*) FROM system.peers;" 2>/dev/null | grep -oP '^\s*\d+' | tr -d ' ' || echo "unknown")
+NODE_COUNT=$(nodetool status 2>/dev/null | grep -c '^[UD][NLJM]' || echo "0")
 
-if [ "$PEER_COUNT" != "0" ] && [ "$PEER_COUNT" != "unknown" ]; then
-  echo "✓ Cluster already has peers ($PEER_COUNT), skipping system keyspace initialization"
+if [ "$NODE_COUNT" -gt 1 ]; then
+  echo "✓ Cluster has $NODE_COUNT nodes, skipping system keyspace initialization"
   exit 0
 fi
 
+echo "✓ Single node detected ($NODE_COUNT node)"
+
 # ============================================================================
-# 3. Check current replication for system_auth (primary safety check)
+# 3. Check replication strategies using nodetool describecluster
 # ============================================================================
 echo ""
-echo "Checking system_auth replication strategy..."
-SYSTEM_AUTH_REPL=$(cqlsh -u cassandra -p cassandra -e "SELECT replication FROM system_schema.keyspaces WHERE keyspace_name = 'system_auth';" 2>/dev/null | grep '{' || echo "unknown")
+echo "Checking replication strategies..."
+CLUSTER_INFO=$(nodetool describecluster 2>/dev/null)
 
-if [[ "$SYSTEM_AUTH_REPL" == *"NetworkTopologyStrategy"* ]]; then
+# Check if any of the 3 keyspaces already use NetworkTopologyStrategy
+if echo "$CLUSTER_INFO" | grep -q "system_auth -> Replication class: NetworkTopologyStrategy"; then
   echo "✓ system_auth already uses NetworkTopologyStrategy, skipping initialization"
   exit 0
 fi
 
-if [[ "$SYSTEM_AUTH_REPL" == *"SimpleStrategy"* ]]; then
-  # Extract RF from SimpleStrategy
-  RF=$(echo "$SYSTEM_AUTH_REPL" | grep -oP "'replication_factor':\s*\d+" | grep -oP '\d+' || echo "unknown")
-  
-  if [ "$RF" != "1" ] && [ "$RF" != "unknown" ]; then
-    echo "⚠ system_auth uses SimpleStrategy with RF=$RF (not 1), skipping initialization"
-    echo "   User may have already customized this. Aborting to prevent misconfiguration."
-    exit 0
-  fi
-fi
-
-# ============================================================================
-# 4. Check system_distributed replication (only check if already NTS)
-# ============================================================================
-# Note: Cassandra 5.0 defaults system_distributed to RF=3, system_traces to RF=2
-# We only use system_auth RF=1 check as the indicator of "fresh/uncustomized" cluster
-# If system_auth is RF=1 and SimpleStrategy, we convert all 3 keyspaces to NTS
-echo "Checking system_distributed replication strategy..."
-SYSTEM_DIST_REPL=$(cqlsh -u cassandra -p cassandra -e "SELECT replication FROM system_schema.keyspaces WHERE keyspace_name = 'system_distributed';" 2>/dev/null | grep '{' || echo "unknown")
-
-if [[ "$SYSTEM_DIST_REPL" == *"NetworkTopologyStrategy"* ]]; then
+if echo "$CLUSTER_INFO" | grep -q "system_distributed -> Replication class: NetworkTopologyStrategy"; then
   echo "✓ system_distributed already uses NetworkTopologyStrategy, skipping initialization"
   exit 0
 fi
 
-# ============================================================================
-# 5. Check system_traces replication (only check if already NTS)
-# ============================================================================
-echo "Checking system_traces replication strategy..."
-SYSTEM_TRACES_REPL=$(cqlsh -u cassandra -p cassandra -e "SELECT replication FROM system_schema.keyspaces WHERE keyspace_name = 'system_traces';" 2>/dev/null | grep '{' || echo "unknown")
-
-if [[ "$SYSTEM_TRACES_REPL" == *"NetworkTopologyStrategy"* ]]; then
+if echo "$CLUSTER_INFO" | grep -q "system_traces -> Replication class: NetworkTopologyStrategy"; then
   echo "✓ system_traces already uses NetworkTopologyStrategy, skipping initialization"
   exit 0
 fi
+
+# Check if system_auth has been customized (RF != 1)
+# This is our primary indicator that the cluster has been manually configured
+SYSTEM_AUTH_RF=$(echo "$CLUSTER_INFO" | grep "system_auth" | grep -oP 'replication_factor=\K\d+' || echo "1")
+
+if [ "$SYSTEM_AUTH_RF" != "1" ]; then
+  echo "⚠ system_auth uses SimpleStrategy with RF=$SYSTEM_AUTH_RF (not 1), skipping initialization"
+  echo "   User may have already customized this. Aborting to prevent misconfiguration."
+  exit 0
+fi
+
+echo "✓ All checks passed - fresh single-node cluster detected"
+echo "  system_auth: SimpleStrategy RF=$SYSTEM_AUTH_RF"
 
 # ============================================================================
 # 6. All checks passed - proceed with initialization
