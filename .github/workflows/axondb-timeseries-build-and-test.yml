@@ -28,6 +28,13 @@ on:
         required: false
         type: string
         default: '5.0.6'
+  workflow_dispatch:
+    inputs:
+      cassandra_version:
+        description: 'Cassandra version to test'
+        required: false
+        type: string
+        default: '5.0.6'
 
 env:
   REGISTRY: ghcr.io
