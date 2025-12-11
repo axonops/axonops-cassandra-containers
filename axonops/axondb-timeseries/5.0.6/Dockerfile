@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.4
+
 # Supply chain security: Use immutable digest instead of mutable tag
 # UBI 9 minimal base image digest (latest as of 2025-12-10)
 # Points to: registry.access.redhat.com/ubi9/ubi-minimal:latest
@@ -104,10 +106,12 @@ RUN mkdir -p "$CASSANDRA_HOME" /licenses && \
     chown -R cassandra:root "$CASSANDRA_HOME" /etc/cassandra /licenses && \
     rm -rf /tmp/*
 
-# Install cqlai
+# Install cqlai with BuildKit cache mount and retry logic
+# Uses cache to avoid repeated downloads across builds and provides retry logic for reliability
 # Note: Uses uname -m for architecture detection. For multi-arch builds with buildx,
 # this will be set correctly by the platform-specific base image.
-RUN if [ -z "$CQLAI_VERSION" ]; then \
+RUN --mount=type=cache,target=/var/cache/cqlai,id=cqlai-rpms,sharing=locked \
+    if [ -z "$CQLAI_VERSION" ]; then \
       echo "ERROR: CQLAI_VERSION build arg is required"; \
       exit 1; \
     fi && \
@@ -116,15 +120,35 @@ RUN if [ -z "$CQLAI_VERSION" ]; then \
     echo "Detected architecture: $RPM_ARCH" && \
     CQLAI_RPM="cqlai-${CQLAI_VERSION}-1.${RPM_ARCH}.rpm" && \
     CQLAI_URL="https://github.com/axonops/cqlai/releases/download/v${CQLAI_VERSION}" && \
-    curl -sL -o "/tmp/${CQLAI_RPM}" "${CQLAI_URL}/${CQLAI_RPM}" && \
-    if curl -sL -o /tmp/SHA256SUMS.txt "${CQLAI_URL}/SHA256SUMS.txt" 2>/dev/null && [ -s /tmp/SHA256SUMS.txt ]; then \
-      echo "Verifying checksum..." && \
-      (cd /tmp && grep "${CQLAI_RPM}" SHA256SUMS.txt | sha256sum -c - || echo "WARNING: Checksum verification failed, continuing anyway"); \
+    CACHE_RPM="/var/cache/cqlai/${CQLAI_RPM}" && \
+    \
+    if [ ! -f "${CACHE_RPM}" ]; then \
+      echo "[INFO] Downloading cqlai RPM (not in cache)..." && \
+      for attempt in 1 2 3 4 5; do \
+        echo "[INFO] Download attempt ${attempt}/5" && \
+        if curl -fsSL --retry 3 --retry-delay 5 --retry-max-time 120 \
+          -o "${CACHE_RPM}.tmp" "${CQLAI_URL}/${CQLAI_RPM}"; then \
+          mv "${CACHE_RPM}.tmp" "${CACHE_RPM}" && \
+          echo "[INFO] Download successful" && \
+          break; \
+        else \
+          echo "[WARNING] Download failed" && \
+          rm -f "${CACHE_RPM}.tmp" && \
+          if [ ${attempt} -lt 5 ]; then \
+            sleep_time=$((attempt * 10)); \
+            echo "[INFO] Retrying in ${sleep_time}s..." && \
+            sleep ${sleep_time}; \
+          else \
+            echo "[ERROR] Failed to download after 5 attempts"; \
+            exit 1; \
+          fi; \
+        fi; \
+      done; \
     else \
-      echo "WARNING: SHA256SUMS.txt not found, skipping checksum verification"; \
+      echo "[INFO] Using cached cqlai RPM"; \
     fi && \
-    rpm -i "/tmp/${CQLAI_RPM}" && \
-    rm -f "${CQLAI_RPM}" SHA256SUMS.txt && \
+    \
+    rpm -i "${CACHE_RPM}" && \
     rm -rf /var/tmp/rpm-* /var/cache/yum /var/cache/dnf
 
 # Overlay our custom config files to /etc/cassandra
