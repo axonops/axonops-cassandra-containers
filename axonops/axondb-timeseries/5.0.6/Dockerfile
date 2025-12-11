@@ -121,9 +121,10 @@ RUN --mount=type=cache,target=/var/cache/cqlai,id=cqlai-rpms,sharing=locked \
     CQLAI_RPM="cqlai-${CQLAI_VERSION}-1.${RPM_ARCH}.rpm" && \
     CQLAI_URL="https://github.com/axonops/cqlai/releases/download/v${CQLAI_VERSION}" && \
     CACHE_RPM="/var/cache/cqlai/${CQLAI_RPM}" && \
+    echo "[CACHE] Checking for cached RPM: ${CACHE_RPM}" && \
     \
     if [ ! -f "${CACHE_RPM}" ]; then \
-      echo "[INFO] Downloading cqlai RPM (not in cache)..." && \
+      echo "[CACHE] MISS - Downloading cqlai RPM..." && \
       for attempt in 1 2 3 4 5; do \
         echo "[INFO] Download attempt ${attempt}/5" && \
         if curl -fsSL --retry 3 --retry-delay 5 --retry-max-time 120 \
@@ -145,10 +146,11 @@ RUN --mount=type=cache,target=/var/cache/cqlai,id=cqlai-rpms,sharing=locked \
         fi; \
       done; \
     else \
-      echo "[INFO] Using cached cqlai RPM"; \
+      echo "[CACHE] HIT - Using cached cqlai RPM (no download needed)"; \
     fi && \
-    \
+    echo "[INFO] Installing RPM from: ${CACHE_RPM}" && \
     rpm -i "${CACHE_RPM}" && \
+    echo "[INFO] cqlai installation complete" && \
     rm -rf /var/tmp/rpm-* /var/cache/yum /var/cache/dnf
 
 # Overlay our custom config files to /etc/cassandra
