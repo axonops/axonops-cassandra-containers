@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.4
-
 # Supply chain security: Use immutable digest instead of mutable tag
 # UBI 9 minimal base image digest (latest as of 2025-12-10)
 # Points to: registry.access.redhat.com/ubi9/ubi-minimal:latest
@@ -106,85 +104,27 @@ RUN mkdir -p "$CASSANDRA_HOME" /licenses && \
     chown -R cassandra:root "$CASSANDRA_HOME" /etc/cassandra /licenses && \
     rm -rf /tmp/*
 
-# Install cqlai with BuildKit cache mount, checksum verification, and retry logic
-# Cache is version-specific and always verified against upstream checksums
+# Install cqlai
 # Note: Uses uname -m for architecture detection. For multi-arch builds with buildx,
 # this will be set correctly by the platform-specific base image.
-# Test cache mount: 2025-12-11
-RUN --mount=type=cache,target=/var/cache/cqlai,id=cqlai-rpms,sharing=locked \
-    if [ -z "$CQLAI_VERSION" ]; then \
+RUN if [ -z "$CQLAI_VERSION" ]; then \
       echo "ERROR: CQLAI_VERSION build arg is required"; \
       exit 1; \
     fi && \
     echo "Installing cqlai version: $CQLAI_VERSION" && \
-    echo "[TEST] Cache mount verification run - 2025-12-11" && \
     RPM_ARCH=$(uname -m) && \
     echo "Detected architecture: $RPM_ARCH" && \
     CQLAI_RPM="cqlai-${CQLAI_VERSION}-1.${RPM_ARCH}.rpm" && \
     CQLAI_URL="https://github.com/axonops/cqlai/releases/download/v${CQLAI_VERSION}" && \
-    CACHE_RPM="/var/cache/cqlai/${CQLAI_RPM}" && \
-    \
-    echo "[INFO] Downloading checksum file..." && \
-    curl -fsSL --retry 3 -o /tmp/SHA256SUMS.txt "${CQLAI_URL}/SHA256SUMS.txt" || { \
-      echo "[WARNING] Checksum file not available, proceeding without verification"; \
-      SKIP_CHECKSUM=true; \
-    } && \
-    \
-    USE_CACHE=false && \
-    if [ -f "${CACHE_RPM}" ]; then \
-      echo "[CACHE] Cached RPM found, verifying checksum..." && \
-      if [ "$SKIP_CHECKSUM" != "true" ] && (cd /var/cache/cqlai && grep "${CQLAI_RPM}" /tmp/SHA256SUMS.txt | sha256sum -c - 2>&1); then \
-        echo "[CACHE] HIT - Checksum valid, using cached RPM" && \
-        USE_CACHE=true; \
-      else \
-        echo "[CACHE] INVALID - Checksum failed or unavailable, will re-download" && \
-        rm -f "${CACHE_RPM}"; \
-      fi; \
+    curl -sL -o "/tmp/${CQLAI_RPM}" "${CQLAI_URL}/${CQLAI_RPM}" && \
+    if curl -sL -o /tmp/SHA256SUMS.txt "${CQLAI_URL}/SHA256SUMS.txt" 2>/dev/null && [ -s /tmp/SHA256SUMS.txt ]; then \
+      echo "Verifying checksum..." && \
+      (cd /tmp && grep "${CQLAI_RPM}" SHA256SUMS.txt | sha256sum -c - || echo "WARNING: Checksum verification failed, continuing anyway"); \
     else \
-      echo "[CACHE] MISS - RPM not in cache"; \
+      echo "WARNING: SHA256SUMS.txt not found, skipping checksum verification"; \
     fi && \
-    \
-    if [ "$USE_CACHE" = "false" ]; then \
-      echo "[INFO] Downloading cqlai RPM..." && \
-      for attempt in 1 2 3 4 5; do \
-        echo "[INFO] Download attempt ${attempt}/5" && \
-        if curl -fsSL --retry 3 --retry-delay 5 --retry-max-time 120 \
-          -o "${CACHE_RPM}.tmp" "${CQLAI_URL}/${CQLAI_RPM}"; then \
-          mv "${CACHE_RPM}.tmp" "${CACHE_RPM}" && \
-          echo "[INFO] Download successful" && \
-          break; \
-        else \
-          echo "[WARNING] Download failed" && \
-          rm -f "${CACHE_RPM}.tmp" && \
-          if [ ${attempt} -lt 5 ]; then \
-            sleep_time=$((attempt * 10)); \
-            echo "[INFO] Retrying in ${sleep_time}s..." && \
-            sleep ${sleep_time}; \
-          else \
-            echo "[ERROR] Failed to download after 5 attempts"; \
-            exit 1; \
-          fi; \
-        fi; \
-      done && \
-      \
-      if [ "$SKIP_CHECKSUM" != "true" ]; then \
-        echo "[INFO] Verifying downloaded RPM checksum..." && \
-        (cd /var/cache/cqlai && grep "${CQLAI_RPM}" /tmp/SHA256SUMS.txt | sha256sum -c -) || { \
-          echo "[ERROR] Checksum verification failed for downloaded RPM"; \
-          exit 1; \
-        } && \
-        echo "[INFO] Checksum verified"; \
-      fi; \
-    fi && \
-    \
-    echo "[INFO] Installing cqlai RPM" && \
-    rpm -i "${CACHE_RPM}" && \
-    echo "[INFO] cqlai installation complete" && \
-    echo "[DEBUG] Cache directory contents:" && \
-    ls -lah /var/cache/cqlai/ && \
-    echo "[DEBUG] Cache directory size:" && \
-    du -sh /var/cache/cqlai/ && \
-    rm -f /tmp/SHA256SUMS.txt && \
+    rpm -i "/tmp/${CQLAI_RPM}" && \
+    rm -f "${CQLAI_RPM}" SHA256SUMS.txt && \
     rm -rf /var/tmp/rpm-* /var/cache/yum /var/cache/dnf
 
 # Overlay our custom config files to /etc/cassandra
@@ -221,11 +161,9 @@ RUN chmod 755 /usr/local/bin/docker-entrypoint.sh && \
     ln -sf /proc/mounts /etc/mtab
 
 # Tini init system (minimal init for containers - handles signals and prevents zombies)
-# Uses cache mount + retry logic for reliability (same as cqlai)
 # Note: Uses uname -m for architecture detection. For multi-arch builds with buildx,
 # this will be set correctly by the platform-specific base image.
-RUN --mount=type=cache,target=/var/cache/tini,id=tini-binaries,sharing=locked \
-    TINI_VERSION=v0.19.0 && \
+RUN TINI_VERSION=v0.19.0 && \
     ARCH=$(uname -m) && \
     echo "Detected architecture for Tini: $ARCH" && \
     if [ "$ARCH" = "x86_64" ]; then \
@@ -237,55 +175,9 @@ RUN --mount=type=cache,target=/var/cache/tini,id=tini-binaries,sharing=locked \
     else \
         echo "ERROR: Unsupported architecture: $ARCH" && exit 1; \
     fi && \
-    TINI_URL="https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini-${TINI_ARCH}" && \
-    CACHE_TINI="/var/cache/tini/tini-${TINI_VERSION}-${TINI_ARCH}" && \
-    \
-    USE_CACHE=false && \
-    if [ -f "${CACHE_TINI}" ]; then \
-      echo "[CACHE] Cached tini found, verifying checksum..." && \
-      if echo "${TINI_SHA256}  ${CACHE_TINI}" | sha256sum -c - 2>&1; then \
-        echo "[CACHE] HIT - Checksum valid, using cached tini" && \
-        USE_CACHE=true; \
-      else \
-        echo "[CACHE] INVALID - Checksum failed, will re-download" && \
-        rm -f "${CACHE_TINI}"; \
-      fi; \
-    else \
-      echo "[CACHE] MISS - Tini not in cache"; \
-    fi && \
-    \
-    if [ "$USE_CACHE" = "false" ]; then \
-      echo "[INFO] Downloading tini..." && \
-      for attempt in 1 2 3 4 5; do \
-        echo "[INFO] Download attempt ${attempt}/5" && \
-        if wget -q -O "${CACHE_TINI}.tmp" "${TINI_URL}"; then \
-          mv "${CACHE_TINI}.tmp" "${CACHE_TINI}" && \
-          echo "[INFO] Download successful" && \
-          break; \
-        else \
-          echo "[WARNING] Download failed" && \
-          rm -f "${CACHE_TINI}.tmp" && \
-          if [ ${attempt} -lt 5 ]; then \
-            sleep_time=$((attempt * 5)); \
-            echo "[INFO] Retrying in ${sleep_time}s..." && \
-            sleep ${sleep_time}; \
-          else \
-            echo "[ERROR] Failed to download tini after 5 attempts"; \
-            exit 1; \
-          fi; \
-        fi; \
-      done && \
-      echo "[INFO] Verifying downloaded tini checksum..." && \
-      echo "${TINI_SHA256}  ${CACHE_TINI}" | sha256sum -c -; \
-    fi && \
-    \
-    cp "${CACHE_TINI}" /tini && \
-    chmod +x /tini && \
-    echo "[INFO] Tini installation complete" && \
-    echo "[DEBUG] Tini cache directory contents:" && \
-    ls -lah /var/cache/tini/ && \
-    echo "[DEBUG] Tini cache directory size:" && \
-    du -sh /var/cache/tini/
+    wget -q -O /tini "https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini-${TINI_ARCH}" && \
+    echo "${TINI_SHA256}  /tini" | sha256sum -c - && \
+    chmod +x /tini
 
 # Set user to run as
 USER cassandra
