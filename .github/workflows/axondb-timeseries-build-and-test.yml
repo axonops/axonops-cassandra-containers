@@ -208,3 +208,25 @@ jobs:
         uses: ./.github/actions/axondb-timeseries-test-dc-detection
         with:
           image: axondb-timeseries:test
+
+      - name: Collect logs from env-var test
+        if: always()
+        run: |
+          echo "Collecting logs from any test containers..."
+          for container in axondb-env-test axondb-dc-default axondb-dc-custom axondb-dc-log-test; do
+            if docker ps -a | grep -q "$container"; then
+              echo "Collecting logs from $container"
+              mkdir -p /tmp/axondb-env-logs
+              docker logs "$container" > "/tmp/axondb-env-logs/${container}.log" 2>&1 || true
+            fi
+          done
+          ls -la /tmp/axondb-env-logs/ || echo "No logs collected"
+
+      - name: Upload env-var test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: axondb-env-var-test-logs
+          path: /tmp/axondb-env-logs/
+          retention-days: 7
+          if-no-files-found: ignore
