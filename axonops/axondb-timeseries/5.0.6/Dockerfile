@@ -117,6 +117,7 @@ RUN --mount=type=cache,target=/var/cache/cqlai,id=cqlai-rpms,sharing=locked \
       exit 1; \
     fi && \
     echo "Installing cqlai version: $CQLAI_VERSION" && \
+    echo "[TEST] Cache mount verification run - 2025-12-11" && \
     RPM_ARCH=$(uname -m) && \
     echo "Detected architecture: $RPM_ARCH" && \
     CQLAI_RPM="cqlai-${CQLAI_VERSION}-1.${RPM_ARCH}.rpm" && \
