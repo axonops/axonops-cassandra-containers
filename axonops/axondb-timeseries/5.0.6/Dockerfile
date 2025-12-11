@@ -110,6 +110,7 @@ RUN mkdir -p "$CASSANDRA_HOME" /licenses && \
 # Cache is version-specific and always verified against upstream checksums
 # Note: Uses uname -m for architecture detection. For multi-arch builds with buildx,
 # this will be set correctly by the platform-specific base image.
+# Test cache mount: 2025-12-11
 RUN --mount=type=cache,target=/var/cache/cqlai,id=cqlai-rpms,sharing=locked \
     if [ -z "$CQLAI_VERSION" ]; then \
       echo "ERROR: CQLAI_VERSION build arg is required"; \
