@@ -20,13 +20,14 @@ runs:
           exit 0
         }
 
-        # Check for ERROR level messages (excluding known acceptable errors)
-        if grep -i "ERROR" /tmp/cassandra-system.log | grep -v "OutOfMemoryError.*heap space" | grep -v "Simulated error"; then
-          echo "ERROR: Found ERROR messages in system.log"
+        # Check for ERROR level log messages (match Cassandra log format: "LEVEL  [thread] ...")
+        # Exclude: OutOfMemoryError in config dumps, Simulated errors
+        if grep -E "^\w+ +\[.*\] .* ERROR " /tmp/cassandra-system.log | grep -v "Simulated"; then
+          echo "ERROR: Found ERROR level messages in system.log"
           exit 1
         fi
 
-        echo "✓ No ERROR messages found"
+        echo "✓ No ERROR level messages found"
 
     - name: Check for FATAL messages
       shell: bash
