@@ -125,7 +125,7 @@ runs:
         echo "STEP 4: Testing CQL connectivity"
         echo "==========================================="
         for i in {1..20}; do
-          if docker exec ${{ inputs.container_name }} cqlsh -e "SELECT now() FROM system.local LIMIT 1" > /dev/null 2>&1; then
+          if docker exec ${{ inputs.container_name }} cqlsh -u cassandra -p cassandra -e "SELECT now() FROM system.local LIMIT 1" > /dev/null 2>&1; then
             echo "✓ STEP 4 COMPLETE: Cassandra CQL is responsive (attempt $i)"
             echo "==========================================="
             echo "✓✓✓ ALL STARTUP CHECKS PASSED ✓✓✓"
