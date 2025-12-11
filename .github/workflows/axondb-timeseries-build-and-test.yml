@@ -45,7 +45,8 @@ jobs:
       matrix:
         # Currently only Cassandra 5.0.6 (may add 5.0.7, 5.1.x later)
         cassandra_version: ['5.0.6']
-        platform: ['linux/amd64', 'linux/arm64']
+        # Note: Multi-arch builds (amd64 + arm64) are done in publish workflow
+        # Testing only on amd64 for speed and simplicity
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -70,7 +71,7 @@ jobs:
         with:
           context: ./axonops/axondb-timeseries/5.0.6
           file: ./axonops/axondb-timeseries/5.0.6/Dockerfile
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64
           load: true
           tags: axondb-timeseries:test
           build-args: |
@@ -83,50 +84,42 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Start container and wait for services
-        if: matrix.platform == 'linux/amd64'
         uses: ./.github/actions/axondb-timeseries-start-and-wait
         with:
           container_name: axondb-test
 
       - name: Verify no startup errors
-        if: matrix.platform == 'linux/amd64'
         uses: ./.github/actions/axondb-timeseries-verify-no-startup-errors
         with:
           container_name: axondb-test
 
       - name: Verify versions (jemalloc, Cassandra, Java, cqlai)
-        if: matrix.platform == 'linux/amd64'
         uses: ./.github/actions/axondb-timeseries-verify-versions
         with:
           cassandra_version: ${{ steps.version.outputs.cassandra_version }}
           container_name: axondb-test
 
       - name: Test healthcheck script
-        if: matrix.platform == 'linux/amd64'
         uses: ./.github/actions/axondb-timeseries-test-healthcheck
         with:
           container_name: axondb-test
 
       - name: Verify init scripts
-        if: matrix.platform == 'linux/amd64'
         uses: ./.github/actions/axondb-timeseries-verify-init-scripts
         with:
           container_name: axondb-test
 
       - name: Test cqlai
-        if: matrix.platform == 'linux/amd64'
         uses: ./.github/actions/axondb-timeseries-test-cqlai
         with:
           container_name: axondb-test
 
       - name: Test cqlsh
-        if: matrix.platform == 'linux/amd64'
         uses: ./.github/actions/axondb-timeseries-test-cqlsh
         with:
           container_name: axondb-test
 
       - name: Run Trivy container security scan (strict)
-        if: matrix.platform == 'linux/amd64'
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'axondb-timeseries:test'
@@ -138,7 +131,6 @@ jobs:
           trivyignores: 'axonops/axondb-timeseries/.trivyignore'
 
       - name: Run Trivy scan and upload to GitHub Security
-        if: matrix.platform == 'linux/amd64'
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'axondb-timeseries:test'
@@ -149,7 +141,6 @@ jobs:
           trivyignores: 'axonops/axondb-timeseries/.trivyignore'
 
       - name: Upload Trivy scan results to GitHub Security tab
-        if: matrix.platform == 'linux/amd64'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
