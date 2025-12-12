@@ -16,18 +16,51 @@ ARG CASSANDRA_VERSION
 ARG CASSANDRA_SHA512
 ARG CQLAI_VERSION
 
+# Build metadata arguments (provided by CI/CD or set to defaults for local builds)
+ARG BUILD_DATE=unknown
+ARG VCS_REF=unknown
+ARG VERSION=unknown
+ARG GIT_TAG=unknown
+ARG GITHUB_ACTOR=unknown
+ARG IS_PRODUCTION_RELEASE=false
+ARG IMAGE_FULL_NAME=unknown
+
 ENV CASSANDRA_VERSION=${CASSANDRA_VERSION}
 ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8'
 
-RUN echo "AXONOPS_BUILD: Using UBI 9 minimal base image (digest: ${UBI9_MINIMAL_DIGEST})"
+RUN echo "AXONOPS_BUILD: Using UBI 9 minimal base image (registry.access.redhat.com/ubi9/ubi-minimal)"
+RUN echo "AXONOPS_BUILD: Base image digest: ${UBI9_MINIMAL_DIGEST}"
 RUN echo "AXONOPS_BUILD: Will download Cassandra ${CASSANDRA_VERSION} from Apache mirrors"
 
+# Legacy labels (for backward compatibility)
 LABEL maintainer="AxonOps"
 LABEL name="AxonOps AxonDB Time-Series Database (Apache Cassandra ${CASSANDRA_VERSION})"
 LABEL vendor="AxonOps"
+LABEL url="https://axonops.com"
 LABEL release="${CASSANDRA_VERSION}"
 LABEL summary="Apache Cassandra ${CASSANDRA_VERSION} optimized for AxonOps self-hosted deployments with integrated monitoring and time-series workloads"
-LABEL description="Production-ready Apache Cassandra ${CASSANDRA_VERSION} container built on Red Hat UBI 9, featuring system keyspace auto-initialization, jemalloc memory optimization, cqlai modern CQL shell, and AxonOps-optimized configuration for time-series database workloads."
+LABEL description="Production-ready Apache Cassandra ${CASSANDRA_VERSION} container built on Red Hat UBI 9, featuring system keyspace auto-initialization, jemalloc memory optimization, cqlai v${CQLAI_VERSION}, and AxonOps-optimized configuration for time-series database workloads."
+
+# OCI standard labels
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.authors="AxonOps"
+LABEL org.opencontainers.image.url="https://axonops.com"
+LABEL org.opencontainers.image.documentation="https://github.com/axonops/axonops-containers/blob/main/axonops/axondb-timeseries/README.md"
+LABEL org.opencontainers.image.source="https://github.com/axonops/axonops-containers"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.revision="${VCS_REF}"
+LABEL org.opencontainers.image.vendor="AxonOps"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.title="AxonOps AxonDB Time-Series (Apache Cassandra ${CASSANDRA_VERSION})"
+LABEL org.opencontainers.image.description="Apache Cassandra ${CASSANDRA_VERSION} with cqlai v${CQLAI_VERSION} and jemalloc memory optimization. Built from Red Hat UBI 9 minimal (${UBI9_MINIMAL_DIGEST}). Optimized for AxonOps self-hosted time-series workloads."
+LABEL org.opencontainers.image.ref.name="${IMAGE_FULL_NAME}"
+LABEL org.opencontainers.image.base.name="registry.access.redhat.com/ubi9/ubi-minimal:latest"
+LABEL org.opencontainers.image.base.digest="${UBI9_MINIMAL_DIGEST}"
+
+# AxonOps-specific labels (com.axonops.* namespace)
+LABEL com.axonops.cassandra.version="${CASSANDRA_VERSION}"
+LABEL com.axonops.cqlai.version="${CQLAI_VERSION}"
+LABEL com.axonops.build.actor="${GITHUB_ACTOR}"
 
 # Update all packages to latest versions (security patches)
 RUN echo "Updating all packages to latest versions..." && \
@@ -138,6 +171,10 @@ RUN mkdir -p ${CASSANDRA_DATA_DIR} ${CASSANDRA_LOG_DIR} && \
     chmod 775 ${CASSANDRA_DATA_DIR} ${CASSANDRA_LOG_DIR} && \
     chmod a+rwX ${CASSANDRA_PATH} /etc/cassandra
 
+# Copy custom Cassandra configuration files
+COPY --chown=cassandra:root config/cassandra-env.sh /etc/cassandra/cassandra-env.sh
+COPY --chown=cassandra:root config/logback.xml /etc/cassandra/logback.xml
+
 # Copy our healthcheck script
 COPY scripts/healthcheck.sh /usr/local/bin/healthcheck.sh
 RUN chmod 755 /usr/local/bin/healthcheck.sh
@@ -146,12 +183,23 @@ RUN chmod 755 /usr/local/bin/healthcheck.sh
 COPY scripts/init-system-keyspaces.sh /usr/local/bin/init-system-keyspaces.sh
 RUN chmod 755 /usr/local/bin/init-system-keyspaces.sh
 
-# Generate build info
+# Generate comprehensive build information for runtime startup banner
+# Values are quoted for safe sourcing in bash
 RUN mkdir -p /etc/axonops && \
-    echo "CASSANDRA_VERSION=\"${CASSANDRA_VERSION}\"" > /etc/axonops/build-info.txt && \
-    echo "JAVA_VERSION=\"$(java -version 2>&1 | head -2 | tail -1)\"" >> /etc/axonops/build-info.txt && \
-    echo "CQLAI_VERSION=\"$(cqlai --version 2>&1 | awk '{print $NF}')\"" >> /etc/axonops/build-info.txt && \
-    echo "JEMALLOC_VERSION=\"$(rpm -q jemalloc)\"" >> /etc/axonops/build-info.txt && \
+    echo "CONTAINER_VERSION=\"${VERSION}\"" > /etc/axonops/build-info.txt && \
+    echo "CONTAINER_IMAGE=\"${IMAGE_FULL_NAME}\"" >> /etc/axonops/build-info.txt && \
+    echo "CONTAINER_REVISION=\"${VCS_REF}\"" >> /etc/axonops/build-info.txt && \
+    echo "CONTAINER_GIT_TAG=\"${GIT_TAG}\"" >> /etc/axonops/build-info.txt && \
+    echo "CONTAINER_BUILD_DATE=\"${BUILD_DATE}\"" >> /etc/axonops/build-info.txt && \
+    echo "CONTAINER_BUILT_BY=\"${GITHUB_ACTOR}\"" >> /etc/axonops/build-info.txt && \
+    echo "IS_PRODUCTION_RELEASE=\"${IS_PRODUCTION_RELEASE}\"" >> /etc/axonops/build-info.txt && \
+    echo "CASSANDRA_VERSION=\"${CASSANDRA_VERSION}\"" >> /etc/axonops/build-info.txt && \
+    echo "UBI9_BASE_DIGEST=\"${UBI9_MINIMAL_DIGEST}\"" >> /etc/axonops/build-info.txt && \
+    echo "JAVA_VERSION=\"$(java -version 2>&1 | head -2 | tail -1 || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
+    echo "CQLAI_VERSION=\"$(cqlai --version 2>&1 | awk '{print $NF}' || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
+    echo "JEMALLOC_VERSION=\"$(rpm -q jemalloc 2>/dev/null || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
+    echo "OS_VERSION=\"$(grep PRETTY_NAME /etc/os-release 2>/dev/null | sed 's/.*="\(.*\)"/\1/' || echo 'unknown') (UBI - Universal Base Image, freely redistributable)\"" >> /etc/axonops/build-info.txt && \
+    echo "PLATFORM=\"$(uname -m || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
     chown -R cassandra:root /etc/axonops
 
 # AxonDB entrypoint
