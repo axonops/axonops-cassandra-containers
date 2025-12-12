@@ -87,6 +87,10 @@ jobs:
             BUILD_DATE=${{ github.event.repository.updated_at }}
             VCS_REF=${{ github.sha }}
             VERSION=test
+            GIT_TAG=test-build
+            GITHUB_ACTOR=${{ github.actor }}
+            IS_PRODUCTION_RELEASE=false
+            IMAGE_FULL_NAME=axondb-timeseries:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
