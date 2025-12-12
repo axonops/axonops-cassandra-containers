@@ -73,12 +73,16 @@ jobs:
           echo "cassandra_version=${CASSANDRA_VER}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "${{ inputs.main_git_tag }}" \
-            --title "AxonDB Time-Series ${{ inputs.container_version }}" \
-            --notes "## AxonDB Time-Series Database Release ${{ inputs.container_version }}
+        id: create_release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const release = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: '${{ inputs.main_git_tag }}',
+              name: `axondb-timeseries-${{ inputs.container_version }}`,
+              body: `## AxonDB Time-Series Database Release ${{ inputs.container_version }}
 
 **Container Image**: \`ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.cassandra_version }}-${{ inputs.container_version }}\`
 
@@ -118,7 +122,12 @@ cosign verify ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.cassandra_
 - **jemalloc**: Latest
 - **Base**: Red Hat UBI 9 minimal
 
-Built with GitHub Actions and signed with Sigstore Cosign."
+Built with GitHub Actions and signed with Sigstore Cosign.`,
+              draft: false,
+              prerelease: false
+            });
+            console.log(\`Release created: \${release.data.html_url}\`);
+            return release.data.id;
 
   axondb-timeseries-test:
     needs: axondb-timeseries-create-release
