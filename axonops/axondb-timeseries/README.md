@@ -222,7 +222,8 @@ The first 10 variables configure Cassandra's core behavior. These are processed 
 
 **Topology Configuration:**
 - `CASSANDRA_DC` and `CASSANDRA_RACK` - Define datacenter and rack for proper replication
-- Automatically sets endpoint snitch to `GossipingPropertyFileSnitch` when configured
+- Written to `cassandra-rackdc.properties` and read by `GossipingPropertyFileSnitch`
+- Defaults: `axonopsdb_dc1` / `rack1` (override for production deployments)
 
 **Resource Configuration:**
 - `CASSANDRA_HEAP_SIZE` - Controls JVM heap (both -Xms and -Xmx set to same value)
@@ -332,7 +333,7 @@ After `exec cassandra -f`, Cassandra replaces the shell script but tini remains 
 - Updates `cassandra.yaml` with user-provided settings
 - Modifies `cassandra-rackdc.properties` for DC/Rack configuration
 - Adjusts JVM heap size in `jvm17-server.options`
-- Automatically sets endpoint snitch to `GossipingPropertyFileSnitch` when DC/Rack are configured
+- Uses `GossipingPropertyFileSnitch` (pre-configured in cassandra.yaml) which reads DC/Rack from cassandra-rackdc.properties
 
 **4. Enables jemalloc Memory Optimization**
 - Sets `LD_PRELOAD=/usr/lib64/libjemalloc.so.2`
@@ -387,10 +388,10 @@ The entrypoint modifies these Cassandra configuration files based on environment
 | File | What's Modified | Environment Variables |
 |------|----------------|----------------------|
 | `/etc/cassandra/cassandra.yaml` | Core Cassandra settings | `CASSANDRA_CLUSTER_NAME`, `CASSANDRA_NUM_TOKENS`, `CASSANDRA_LISTEN_ADDRESS`, `CASSANDRA_RPC_ADDRESS`, `CASSANDRA_BROADCAST_ADDRESS`, `CASSANDRA_BROADCAST_RPC_ADDRESS`, `CASSANDRA_SEEDS` |
-| `/etc/cassandra/cassandra-rackdc.properties` | Datacenter and rack topology | `CASSANDRA_DC`, `CASSANDRA_RACK` |
+| `/etc/cassandra/cassandra-rackdc.properties` | Datacenter and rack topology | `CASSANDRA_DC` (default: `axonopsdb_dc1`), `CASSANDRA_RACK` (default: `rack1`) |
 | `/etc/cassandra/jvm17-server.options` | JVM heap memory settings | `CASSANDRA_HEAP_SIZE` |
 
-**Note:** The endpoint snitch is automatically set to `GossipingPropertyFileSnitch` when `CASSANDRA_DC` or `CASSANDRA_RACK` are provided. This snitch reads topology from `cassandra-rackdc.properties`.
+**Note:** The container uses `GossipingPropertyFileSnitch` (pre-configured in cassandra.yaml), which reads DC/Rack topology from `cassandra-rackdc.properties`. The DC and Rack values default to `axonopsdb_dc1` and `rack1` if not explicitly set.
 
 #### Key Design Decisions
 

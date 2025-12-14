@@ -147,13 +147,11 @@ _sed-in-place() {
 # Update seeds in cassandra.yaml
 _sed-in-place "/etc/cassandra/cassandra.yaml" -r 's/(- seeds:).*/\1 "'"$CASSANDRA_SEEDS"'"/'
 
-# If DC/Rack env vars are set, switch to GossipingPropertyFileSnitch (which reads rackdc.properties)
-if [ -n "$CASSANDRA_DC" ] || [ -n "$CASSANDRA_RACK" ]; then
-    export CASSANDRA_ENDPOINT_SNITCH="GossipingPropertyFileSnitch"
-fi
+# Note: endpoint_snitch is already set to GossipingPropertyFileSnitch in cassandra.yaml
+# This snitch reads DC/Rack from cassandra-rackdc.properties (updated below)
 
 # Apply CASSANDRA_* environment variables to cassandra.yaml
-for yaml in cluster_name num_tokens listen_address rpc_address broadcast_address broadcast_rpc_address endpoint_snitch; do
+for yaml in cluster_name num_tokens listen_address rpc_address broadcast_address broadcast_rpc_address; do
     var="CASSANDRA_${yaml^^}"
     val="${!var}"
     if [ "$val" ]; then
