@@ -21,31 +21,37 @@ cleanup() {
     sleep 2
 }
 
-# Function to wait for container to be healthy
+# Function to wait for container to be ready (using startup healthcheck)
 wait_for_healthy() {
     local container_name="$1"
     local max_wait=300  # 5 minutes
     local elapsed=0
 
-    echo "  Waiting for container to be healthy..."
+    echo "  Waiting for container to be ready (using startup healthcheck)..."
 
     while [ $elapsed -lt $max_wait ]; do
-        if podman inspect "$container_name" --format='{{.State.Health.Status}}' 2>/dev/null | grep -q "healthy"; then
-            echo "  ✓ Container is healthy"
-            return 0
-        fi
-
+        # Check if container is still running
         if ! podman inspect "$container_name" --format='{{.State.Status}}' 2>/dev/null | grep -q "running"; then
             echo "  ✗ Container is not running!"
             return 1
         fi
 
+        # Use our startup healthcheck script
+        if podman exec "$container_name" /usr/local/bin/healthcheck.sh startup 2>/dev/null; then
+            echo "  ✓ Container startup healthcheck passed"
+            return 0
+        fi
+
         sleep 5
         elapsed=$((elapsed + 5))
-        echo "    Waiting... ${elapsed}s / ${max_wait}s"
+        if [ $((elapsed % 30)) -eq 0 ]; then
+            echo "    Waiting... ${elapsed}s / ${max_wait}s"
+        fi
     done
 
-    echo "  ✗ Timeout waiting for container to be healthy"
+    echo "  ✗ Timeout waiting for container startup healthcheck"
+    echo "  Last healthcheck output:"
+    podman exec "$container_name" /usr/local/bin/healthcheck.sh startup 2>&1 || true
     return 1
 }
 
