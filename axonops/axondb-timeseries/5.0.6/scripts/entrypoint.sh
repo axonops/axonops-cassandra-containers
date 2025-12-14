@@ -204,17 +204,18 @@ else
     echo "System keyspace initialization disabled (INIT_SYSTEM_KEYSPACES=false)"
     echo "Writing semaphore files to allow healthcheck to proceed..."
     # Write semaphores immediately so healthcheck doesn't block
-    mkdir -p /etc/axonops
+    # Located in /var/lib/cassandra (persistent volume) not /etc (ephemeral)
+    mkdir -p /var/lib/cassandra/.axonops
     {
         echo "COMPLETED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
         echo "RESULT=skipped"
         echo "REASON=disabled_by_env_var"
-    } > /etc/axonops/init-system-keyspaces.done
+    } > /var/lib/cassandra/.axonops/init-system-keyspaces.done
     {
         echo "COMPLETED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
         echo "RESULT=skipped"
         echo "REASON=init_disabled"
-    } > /etc/axonops/init-db-user.done
+    } > /var/lib/cassandra/.axonops/init-db-user.done
 fi
 
 echo ""

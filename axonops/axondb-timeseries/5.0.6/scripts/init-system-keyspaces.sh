@@ -8,14 +8,16 @@ set -euo pipefail
 #          on first-time cluster bootstrap (ONLY if safe to do so)
 # ============================================================================
 
-# Semaphore file for healthcheck coordination
-SEMAPHORE_FILE="/etc/axonops/init-system-keyspaces.done"
+# Semaphore files for healthcheck coordination
+# Located in /var/lib/cassandra (persistent volume) to survive container restarts
+SEMAPHORE_DIR="/var/lib/cassandra/.axonops"
+SEMAPHORE_FILE="${SEMAPHORE_DIR}/init-system-keyspaces.done"
 
 # Helper function to write semaphore on exit
 write_semaphore() {
   local result="$1"
   local reason="${2:-}"
-  mkdir -p /etc/axonops
+  mkdir -p "$SEMAPHORE_DIR"
   echo "COMPLETED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$SEMAPHORE_FILE"
   echo "RESULT=$result" >> "$SEMAPHORE_FILE"
   [ -n "$reason" ] && echo "REASON=$reason" >> "$SEMAPHORE_FILE"
@@ -207,12 +209,12 @@ write_semaphore "success" "initialized_to_nts"
 # ============================================================================
 # 11. Custom database user creation (if requested)
 # ============================================================================
-USER_SEMAPHORE_FILE="/etc/axonops/init-db-user.done"
+USER_SEMAPHORE_FILE="${SEMAPHORE_DIR}/init-db-user.done"
 
 write_user_semaphore() {
   local result="$1"
   local reason="${2:-}"
-  mkdir -p /etc/axonops
+  mkdir -p "$SEMAPHORE_DIR"
   echo "COMPLETED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$USER_SEMAPHORE_FILE"
   echo "RESULT=$result" >> "$USER_SEMAPHORE_FILE"
   [ -n "$reason" ] && echo "REASON=$reason" >> "$USER_SEMAPHORE_FILE"

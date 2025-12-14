@@ -215,8 +215,11 @@ See README.md "Container Features" section for example output.
 - Requires default cassandra/cassandra credentials
 
 **Semaphore Files:**
-- `/etc/axonops/init-system-keyspaces.done` - System keyspace conversion status
-- `/etc/axonops/init-db-user.done` - Custom user creation status
+Located in `/var/lib/cassandra/.axonops/` (persistent volume, not ephemeral /etc):
+- `init-system-keyspaces.done` - System keyspace conversion status
+- `init-db-user.done` - Custom user creation status
+
+**Always written** (even when skipped) with RESULT field: `success`, `skipped`, or `failed`
 
 Used by healthcheck `startup` probe to ensure initialization completes before marking container ready.
 
@@ -231,9 +234,9 @@ Used by healthcheck `startup` probe to ensure initialization completes before ma
 **Three Modes:**
 
 1. **startup** - For Kubernetes startupProbe
-   - Checks semaphore files exist (CRITICAL for async init coordination)
-     - `/etc/axonops/init-system-keyspaces.done`
-     - `/etc/axonops/init-db-user.done`
+   - Checks semaphore files exist in persistent storage (CRITICAL for async init coordination)
+     - `/var/lib/cassandra/.axonops/init-system-keyspaces.done`
+     - `/var/lib/cassandra/.axonops/init-db-user.done`
    - Verifies Cassandra process running (`pgrep -f cassandra`)
    - Checks CQL port (9042) listening via TCP (`nc`)
    - **Lightweight** - No nodetool calls

@@ -18,14 +18,15 @@ case "$MODE" in
     log "Checking if Cassandra is starting"
 
     # CRITICAL: Check if system keyspace init script semaphore exists
-    INIT_KEYSPACE_SEMAPHORE="/etc/axonops/init-system-keyspaces.done"
+    # Located in /var/lib/cassandra (persistent volume) not /etc (ephemeral)
+    INIT_KEYSPACE_SEMAPHORE="/var/lib/cassandra/.axonops/init-system-keyspaces.done"
     if [ ! -f "$INIT_KEYSPACE_SEMAPHORE" ]; then
       log "Waiting for system keyspace init script to complete (semaphore not found)"
       exit 1
     fi
 
     # CRITICAL: Check if database user init script semaphore exists
-    INIT_USER_SEMAPHORE="/etc/axonops/init-db-user.done"
+    INIT_USER_SEMAPHORE="/var/lib/cassandra/.axonops/init-db-user.done"
     if [ ! -f "$INIT_USER_SEMAPHORE" ]; then
       log "Waiting for database user init script to complete (semaphore not found)"
       exit 1
@@ -79,13 +80,14 @@ case "$MODE" in
     # Check native transport and gossip via nodetool info
     INFO=$(timeout "$TIMEOUT" nodetool info 2>/dev/null)
 
-    if ! echo "$INFO" | grep -q "Native Transport active: true"; then
+    # Handle variable whitespace in nodetool info output (e.g., "Native Transport active          : true")
+    if ! echo "$INFO" | grep -E "Native Transport active[[:space:]]*:[[:space:]]*true" > /dev/null; then
       log "ERROR: Native transport not active"
       echo "$INFO" | grep "Native Transport" >&2 || true
       exit 1
     fi
 
-    if ! echo "$INFO" | grep -q "Gossip active: true"; then
+    if ! echo "$INFO" | grep -E "Gossip active[[:space:]]*:[[:space:]]*true" > /dev/null; then
       log "ERROR: Gossip not active"
       echo "$INFO" | grep "Gossip" >&2 || true
       exit 1

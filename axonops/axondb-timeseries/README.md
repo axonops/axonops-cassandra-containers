@@ -278,7 +278,9 @@ docker exec -it axondb cqlai -u admin -p SecurePassword123
 - User creation runs after system keyspace initialization completes
 - Both operations are handled by the same script: `init-system-keyspaces.sh`
 - Progress logs: `/var/log/cassandra/init-system-keyspaces.log`
-- Completion markers: `/etc/axonops/init-system-keyspaces.done` and `/etc/axonops/init-db-user.done`
+- Completion markers (in persistent volume):
+  - `/var/lib/cassandra/.axonops/init-system-keyspaces.done`
+  - `/var/lib/cassandra/.axonops/init-db-user.done`
 
 ## Container Features
 
@@ -460,9 +462,9 @@ The container includes an optimized healthcheck script supporting three probe ty
 
 **1. Startup Probe** (`healthcheck.sh startup`)
 - **Waits for initialization scripts to complete** (critical for async init pattern)
-- Checks for semaphore files:
-  - `/etc/axonops/init-system-keyspaces.done` (system keyspace conversion)
-  - `/etc/axonops/init-db-user.done` (custom user creation)
+- Checks for semaphore files in persistent storage:
+  - `/var/lib/cassandra/.axonops/init-system-keyspaces.done`
+  - `/var/lib/cassandra/.axonops/init-db-user.done`
 - Verifies Cassandra process is running (`pgrep -f cassandra`)
 - Checks CQL port (9042) is listening (TCP check via `nc`)
 - **Lightweight** - No nodetool calls, just process/port checks
@@ -528,8 +530,9 @@ The initialization uses an **asynchronous background process** coordinated by **
         │   - Waits for native transport + gossip active
         │   - Converts system keyspaces to NetworkTopologyStrategy
         │   - Creates custom database user (if AXONOPS_DB_USER set)
-        │   - Writes semaphore files: /etc/axonops/init-system-keyspaces.done
-        │                             /etc/axonops/init-db-user.done
+        │   - Writes semaphore files to persistent storage:
+        │       /var/lib/cassandra/.axonops/init-system-keyspaces.done
+        │       /var/lib/cassandra/.axonops/init-db-user.done
         │
         └─► healthcheck.sh (startup probe) checks for semaphores
             - Blocks until BOTH semaphore files exist
@@ -549,23 +552,24 @@ The initialization uses an **asynchronous background process** coordinated by **
 2. Verifies this is a single-node cluster with default credentials
 3. Detects datacenter name from running Cassandra instance
 4. Converts `system_auth`, `system_distributed`, `system_traces` to `NetworkTopologyStrategy`
-5. Writes completion semaphore: `/etc/axonops/init-system-keyspaces.done`
+5. Writes completion semaphore to persistent storage: `/var/lib/cassandra/.axonops/init-system-keyspaces.done`
 
 **Note:** Repair is NOT run because this is a single-node deployment (repair is only meaningful with multiple replicas).
 
 **Safety checks:**
-- Only runs on single-node clusters (skips multi-node)
-- Only runs if replication factor is 1 (skips if already customized)
-- Only runs if using `SimpleStrategy` (skips if already `NetworkTopologyStrategy`)
+- Only runs on single-node clusters (skips multi-node and writes skip semaphore)
+- Only runs if replication factor is 1 (skips if already customized and writes skip semaphore)
+- Only runs if using `SimpleStrategy` (skips if already `NetworkTopologyStrategy` and writes skip semaphore)
 - Requires default `cassandra/cassandra` credentials
+- **Semaphores are ALWAYS written** (success or skipped with reason) to allow healthcheck to proceed
 
 **Logs:**
 ```bash
 # View initialization logs
 docker exec axondb cat /var/log/cassandra/init-system-keyspaces.log
 
-# Check semaphore status
-docker exec axondb cat /etc/axonops/init-system-keyspaces.done
+# Check semaphore status (in persistent volume)
+docker exec axondb cat /var/lib/cassandra/.axonops/init-system-keyspaces.done
 ```
 
 **Disable if needed:**
@@ -574,6 +578,41 @@ docker run -d --name axondb \
   -e INIT_SYSTEM_KEYSPACES=false \
   ghcr.io/axonops/axondb-timeseries:5.0.6-1.0.0
 ```
+
+#### Semaphore Files
+
+The initialization process uses semaphore files to coordinate between the background init script and the healthcheck startup probe.
+
+**Location:** `/var/lib/cassandra/.axonops/`
+
+Semaphore files are stored in the Cassandra data directory (not `/etc`) because:
+- `/var/lib/cassandra` is a persistent volume (survives container restarts)
+- `/etc` is ephemeral (lost on container restart)
+- Persistent semaphores prevent re-initialization on pod restarts
+- Allows healthcheck to immediately pass after container restart
+
+**Files Created:**
+- `init-system-keyspaces.done` - System keyspace conversion status
+- `init-db-user.done` - Custom user creation status
+
+**File Format:**
+```
+COMPLETED=2025-12-14T09:32:17Z
+RESULT=success
+REASON=initialized_to_nts
+```
+
+**RESULT values:**
+- `success` - Operation completed successfully
+- `skipped` - Operation skipped (with REASON explaining why)
+  - `multi_node_cluster` - Multi-node cluster detected
+  - `already_nts` - Already using NetworkTopologyStrategy
+  - `custom_rf` - Replication factor != 1 (already customized)
+  - `disabled_by_env_var` - INIT_SYSTEM_KEYSPACES=false
+  - `no_custom_user_requested` - No AXONOPS_DB_USER set
+- `failed` - Operation failed (with REASON explaining failure)
+
+**Guarantee:** Semaphore files are **ALWAYS** written in all code paths (success, skipped, or failed). The healthcheck startup probe requires both semaphore files to exist before marking the container as started.
 
 ### Custom Database User Creation
 
@@ -725,11 +764,11 @@ Check initialization progress and results:
 # View init script output
 docker exec axondb cat /var/log/cassandra/init-system-keyspaces.log
 
-# Check system keyspace init status
-docker exec axondb cat /etc/axonops/init-system-keyspaces.done
+# Check system keyspace init status (in persistent volume)
+docker exec axondb cat /var/lib/cassandra/.axonops/init-system-keyspaces.done
 
-# Check custom user creation status
-docker exec axondb cat /etc/axonops/init-db-user.done
+# Check custom user creation status (in persistent volume)
+docker exec axondb cat /var/lib/cassandra/.axonops/init-db-user.done
 ```
 
 **Semaphore file format:**
