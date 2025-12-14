@@ -242,7 +242,7 @@ docker run -d --name axondb \
 
 ### Initialization Control
 
-The last 3 variables control automatic initialization behavior that occurs after Cassandra starts.
+The last 3 variables (`INIT_SYSTEM_KEYSPACES`, `AXONOPS_DB_USER`, `AXONOPS_DB_PASSWORD`) control automatic initialization behavior that occurs after Cassandra starts.
 
 **System Keyspace Initialization:**
 
