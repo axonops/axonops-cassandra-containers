@@ -39,6 +39,20 @@ wait_for_healthy() {
         # Use our startup healthcheck script
         if podman exec "$container_name" /usr/local/bin/healthcheck.sh startup 2>/dev/null; then
             echo "  ✓ Container startup healthcheck passed"
+
+            # Also wait for readiness (ensures CQL is fully operational)
+            echo "  Waiting for readiness healthcheck..."
+            local ready_wait=0
+            while [ $ready_wait -lt 30 ]; do
+                if podman exec "$container_name" /usr/local/bin/healthcheck.sh readiness 2>/dev/null; then
+                    echo "  ✓ Container readiness healthcheck passed"
+                    return 0
+                fi
+                sleep 2
+                ready_wait=$((ready_wait + 2))
+            done
+
+            echo "  ⚠ Readiness check taking longer than expected, but continuing..."
             return 0
         fi
 
