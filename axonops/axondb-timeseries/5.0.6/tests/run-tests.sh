@@ -55,10 +55,10 @@ check_semaphores() {
     echo "  Checking semaphore files..."
 
     echo "    - System keyspace init semaphore:"
-    podman exec "$container_name" cat /etc/axonops/init-system-keyspaces.done 2>/dev/null || echo "      NOT FOUND"
+    podman exec "$container_name" cat /var/lib/cassandra/.axonops/init-system-keyspaces.done 2>/dev/null || echo "      NOT FOUND"
 
     echo "    - Database user init semaphore:"
-    podman exec "$container_name" cat /etc/axonops/init-db-user.done 2>/dev/null || echo "      NOT FOUND"
+    podman exec "$container_name" cat /var/lib/cassandra/.axonops/init-db-user.done 2>/dev/null || echo "      NOT FOUND"
 }
 
 # Function to check keyspace replication
@@ -132,8 +132,7 @@ run_test() {
     echo "    --- init-system-keyspaces.log ---"
     podman exec "$container_name" cat /var/log/cassandra/init-system-keyspaces.log 2>/dev/null || echo "    Log file not found"
     echo ""
-    echo "    --- init-db-user.log ---"
-    podman exec "$container_name" cat /var/log/cassandra/init-db-user.log 2>/dev/null || echo "    Log file not found"
+    echo "    Note: Both keyspace and user init logged to same file (init-system-keyspaces.log)"
 
     # Cleanup
     cleanup "$compose_file"
@@ -164,7 +163,7 @@ validate_test2() {
     check_semaphores "$container"
 
     # Verify init was skipped
-    if podman exec "$container" cat /etc/axonops/init-system-keyspaces.done 2>/dev/null | grep "disabled_by_env_var"; then
+    if podman exec "$container" cat /var/lib/cassandra/.axonops/init-system-keyspaces.done 2>/dev/null | grep "disabled_by_env_var"; then
         echo "  ✓ System keyspace init was skipped as expected"
         return 0
     else
@@ -201,21 +200,26 @@ validate_test3() {
 validate_test4() {
     local container="$1"
     check_semaphores "$container"
-    check_user "$container" "axonops"
 
     # Verify init was skipped
-    if ! podman exec "$container" cat /etc/axonops/init-system-keyspaces.done 2>/dev/null | grep "disabled_by_env_var"; then
+    if ! podman exec "$container" cat /var/lib/cassandra/.axonops/init-system-keyspaces.done 2>/dev/null | grep "disabled_by_env_var"; then
         echo "  ✗ System keyspace init was NOT skipped"
         return 1
     fi
 
-    # Verify custom user works
-    if podman exec "$container" cqlsh -u axonops -p securepass123 -e "SELECT now() FROM system.local LIMIT 1;" 2>/dev/null; then
-        echo "  ✓ Custom user 'axonops' created and working"
-        echo "  ✓ Test passed: Init skipped AND custom user created"
+    # Verify user init was also skipped (when INIT_SYSTEM_KEYSPACES_AND_ROLES=false, both skip)
+    if ! podman exec "$container" cat /var/lib/cassandra/.axonops/init-db-user.done 2>/dev/null | grep "init_disabled"; then
+        echo "  ✗ User init was NOT skipped"
+        return 1
+    fi
+
+    # Should still be able to login with default credentials
+    if podman exec "$container" cqlsh -u cassandra -p cassandra -e "SELECT now() FROM system.local LIMIT 1;" 2>/dev/null; then
+        echo "  ✓ Both init operations skipped as expected"
+        echo "  ✓ Default cassandra credentials still work"
         return 0
     else
-        echo "  ✗ Custom user 'axonops' authentication failed"
+        echo "  ✗ Cannot connect with default credentials"
         return 1
     fi
 }
