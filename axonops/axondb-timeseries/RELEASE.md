@@ -4,6 +4,41 @@ This document describes how to create and publish AxonDB Time-Series container r
 
 **Important:** All images are cryptographically signed with Sigstore Cosign using keyless signing (OIDC). Use the `-signed` workflows for all releases.
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Development Release Workflow](#development-release-workflow)
+  - [1. Development and Testing](#1-development-and-testing)
+  - [2. Publish Development Images (Optional)](#2-publish-development-images-optional)
+  - [3. Promote to Production](#3-promote-to-production)
+- [Production Release Workflow](#production-release-workflow)
+  - [4. Create Git Tag on Main Branch](#4-create-git-tag-on-main-branch)
+  - [5. Trigger Production Publish Workflow](#5-trigger-production-publish-workflow)
+  - [6. Workflow Execution](#6-workflow-execution)
+  - [7. Verify Release](#7-verify-release)
+- [Inputs Reference](#inputs-reference)
+  - [main_git_tag](#main_git_tag)
+  - [container_version](#container_version)
+- [Published Artifacts](#published-artifacts)
+  - [Container Images (GHCR)](#container-images-ghcr)
+  - [GitHub Release](#github-release)
+  - [Cosign Signatures](#cosign-signatures)
+- [Troubleshooting](#troubleshooting)
+  - [Version Already Exists](#version-already-exists)
+  - [Tests Fail During Publish](#tests-fail-during-publish)
+  - [Workflow Cannot Find Tag](#workflow-cannot-find-tag)
+  - [Tag Not on Main Branch](#tag-not-on-main-branch)
+  - [Image Push Fails](#image-push-fails)
+  - [Signature Verification Fails](#signature-verification-fails)
+- [Re-releasing](#re-releasing)
+- [Versioning Strategy](#versioning-strategy)
+  - [Semantic Versioning](#semantic-versioning)
+  - [Examples](#examples)
+  - [When to Increment](#when-to-increment)
+  - [Pre-release Versions](#pre-release-versions)
+- [Checklist](#checklist)
+- [Release Cadence](#release-cadence)
+
 ## Overview
 
 The release process uses separate workflows for development and production:
