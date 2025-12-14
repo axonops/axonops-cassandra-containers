@@ -237,6 +237,7 @@ Used by healthcheck `startup` probe to ensure initialization completes before ma
    - Checks semaphore files exist in persistent storage (CRITICAL for async init coordination)
      - `/var/lib/cassandra/.axonops/init-system-keyspaces.done`
      - `/var/lib/cassandra/.axonops/init-db-user.done`
+   - **Validates RESULT field** - Fails if either has `RESULT=failed`
    - Verifies Cassandra process running (`pgrep -f cassandra`)
    - Checks CQL port (9042) listening via TCP (`nc`)
    - **Lightweight** - No nodetool calls

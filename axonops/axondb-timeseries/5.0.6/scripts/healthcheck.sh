@@ -32,6 +32,21 @@ case "$MODE" in
       exit 1
     fi
 
+    # CRITICAL: Check RESULT field in semaphore files - fail if initialization failed
+    KEYSPACE_RESULT=$(grep "^RESULT=" "$INIT_KEYSPACE_SEMAPHORE" | cut -d'=' -f2)
+    if [ "$KEYSPACE_RESULT" = "failed" ]; then
+      KEYSPACE_REASON=$(grep "^REASON=" "$INIT_KEYSPACE_SEMAPHORE" | cut -d'=' -f2)
+      log "ERROR: System keyspace initialization failed: ${KEYSPACE_REASON}"
+      exit 1
+    fi
+
+    USER_RESULT=$(grep "^RESULT=" "$INIT_USER_SEMAPHORE" | cut -d'=' -f2)
+    if [ "$USER_RESULT" = "failed" ]; then
+      USER_REASON=$(grep "^REASON=" "$INIT_USER_SEMAPHORE" | cut -d'=' -f2)
+      log "ERROR: Database user initialization failed: ${USER_REASON}"
+      exit 1
+    fi
+
     # Check if Cassandra process is running
     if ! pgrep -f cassandra > /dev/null 2>&1; then
       log "Cassandra process not running"
@@ -44,7 +59,7 @@ case "$MODE" in
       exit 1
     fi
 
-    log "Startup check passed (init scripts complete + process running + port listening)"
+    log "Startup check passed (init: ${KEYSPACE_RESULT}/${USER_RESULT}, process running, port listening)"
     exit 0
     ;;
 

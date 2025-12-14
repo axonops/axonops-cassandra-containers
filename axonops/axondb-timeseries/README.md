@@ -462,12 +462,13 @@ The container includes an optimized healthcheck script supporting three probe ty
 **1. Startup Probe** (`healthcheck.sh startup`)
 - **Waits for initialization scripts to complete** (critical for async init pattern)
 - Checks for semaphore files in persistent storage:
-  - `/var/lib/cassandra/.axonops/init-system-keyspaces.done`
-  - `/var/lib/cassandra/.axonops/init-db-user.done`
+  - `/var/lib/cassandra/.axonops/init-system-keyspaces.done` (must exist)
+  - `/var/lib/cassandra/.axonops/init-db-user.done` (must exist)
+- **Validates RESULT field** - Fails if either semaphore has `RESULT=failed`
 - Verifies Cassandra process is running (`pgrep -f cassandra`)
 - Checks CQL port (9042) is listening (TCP check via `nc`)
 - **Lightweight** - No nodetool calls, just process/port checks
-- **Blocks pod "Started" status until init completes**
+- **Blocks pod "Started" status until init completes successfully**
 - Use for: Kubernetes `startupProbe` (ensures init finishes before traffic routing)
 
 **2. Liveness Probe** (`healthcheck.sh liveness`)
@@ -638,7 +639,7 @@ REASON=initialized_to_nts
 **RESULT values for init-system-keyspaces.done:**
 - `success` - System keyspaces converted successfully
   - `initialized_to_nts` - Converted to NetworkTopologyStrategy
-- `skipped` - Conversion skipped (with REASON)
+- `skipped` - Conversion skipped (with REASON explaining why)
   - `multi_node_cluster` - Multi-node cluster detected
   - `already_nts` - Already using NetworkTopologyStrategy
   - `custom_rf` - Replication factor != 1 (already customized)
@@ -647,6 +648,8 @@ REASON=initialized_to_nts
   - `native_transport_timeout` - Native transport didn't activate
   - `cql_connectivity_failed` - CQL connectivity check failed
   - `dc_detection_failed` - Could not detect datacenter name
+
+**Note:** System keyspace conversion never writes `RESULT=failed` - it only skips if conditions aren't met. This is safe because keyspace conversion failures would prevent Cassandra from starting.
 
 **RESULT values for init-db-user.done:**
 - `success` - Custom user created successfully
@@ -660,7 +663,13 @@ REASON=initialized_to_nts
   - `create_user_failed` - Failed to create user
   - `new_user_auth_failed` - New user authentication test failed
 
-**Guarantee:** Both semaphore files are **ALWAYS** written in all code paths (success, skipped, or failed). The healthcheck startup probe requires both semaphore files to exist before marking the container as started.
+**Guarantee:** Both semaphore files are **ALWAYS** written in all code paths. The healthcheck startup probe:
+1. Requires both semaphore files to exist
+2. Checks the RESULT field in each semaphore
+3. **Fails the startup probe if either RESULT=failed**
+4. Passes only if both are RESULT=success or RESULT=skipped
+
+This ensures the container won't be marked "Started" if initialization failed.
 
 #### Initialization Logs
 
