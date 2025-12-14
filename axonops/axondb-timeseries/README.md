@@ -206,7 +206,7 @@ The container supports 14 environment variables for configuration:
 | `CASSANDRA_BROADCAST_RPC_ADDRESS` | Broadcast RPC address to clients | Same as `CASSANDRA_LISTEN_ADDRESS` | Cassandra |
 | `CASSANDRA_SEEDS` | Seed node addresses (comma-separated) | Own IP (for single-node) | Cassandra |
 | `CASSANDRA_HEAP_SIZE` | JVM heap size (both -Xms and -Xmx) | `8G` | Cassandra |
-| `INIT_SYSTEM_KEYSPACES_AND_ROLES_AND_ROLES` | Auto-convert system keyspaces and create custom roles | `true` | Initialization |
+| `INIT_SYSTEM_KEYSPACES_AND_ROLES` | Auto-convert system keyspaces and create custom roles | `true` | Initialization |
 | `INIT_TIMEOUT` | Timeout in seconds for initialization script to wait for Cassandra | `600` (10 min) | Initialization |
 | `AXONOPS_DB_USER` | Create custom superuser with this username (optional) | - | Initialization |
 | `AXONOPS_DB_PASSWORD` | Password for custom superuser (required if `AXONOPS_DB_USER` set) | - | Initialization |
@@ -243,7 +243,7 @@ docker run -d --name axondb \
 
 ### Initialization Control
 
-The last 4 variables (`INIT_SYSTEM_KEYSPACES_AND_ROLES_AND_ROLES`, `INIT_TIMEOUT`, `AXONOPS_DB_USER`, `AXONOPS_DB_PASSWORD`) control automatic initialization behavior that occurs after Cassandra starts.
+The last 4 variables (`INIT_SYSTEM_KEYSPACES_AND_ROLES`, `INIT_TIMEOUT`, `AXONOPS_DB_USER`, `AXONOPS_DB_PASSWORD`) control automatic initialization behavior that occurs after Cassandra starts.
 
 **System Keyspace Initialization:**
 
@@ -266,7 +266,7 @@ docker run -d --name axondb \
 - Writes semaphore files for healthcheck coordination
 - Skips if already converted or if multi-node cluster detected
 
-To disable: `INIT_SYSTEM_KEYSPACES_AND_ROLES_AND_ROLES=false`
+To disable: `INIT_SYSTEM_KEYSPACES_AND_ROLES=false`
 
 **Custom Database User:**
 
@@ -276,7 +276,7 @@ Automatically create a custom superuser and disable the default `cassandra` user
 docker run -d --name axondb \
   -e AXONOPS_DB_USER=admin \
   -e AXONOPS_DB_PASSWORD=SecurePassword123 \
-  -e INIT_SYSTEM_KEYSPACES_AND_ROLES_AND_ROLES=true \
+  -e INIT_SYSTEM_KEYSPACES_AND_ROLES=true \
   -p 9042:9042 \
   ghcr.io/axonops/axondb-timeseries:5.0.6-1.0.0
 
@@ -598,7 +598,7 @@ The second phase creates a custom superuser and disables the default `cassandra`
 docker run -d --name axondb \
   -e AXONOPS_DB_USER=dbadmin \
   -e AXONOPS_DB_PASSWORD=MySecurePassword123! \
-  -e INIT_SYSTEM_KEYSPACES_AND_ROLES_AND_ROLES=true \
+  -e INIT_SYSTEM_KEYSPACES_AND_ROLES=true \
   ghcr.io/axonops/axondb-timeseries:5.0.6-1.0.0
 
 # Wait for initialization (~2 minutes)
@@ -620,7 +620,7 @@ docker exec -it axondb cqlai -u dbadmin -p MySecurePassword123!
 **Disable all initialization:**
 ```bash
 docker run -d --name axondb \
-  -e INIT_SYSTEM_KEYSPACES_AND_ROLES_AND_ROLES=false \
+  -e INIT_SYSTEM_KEYSPACES_AND_ROLES=false \
   ghcr.io/axonops/axondb-timeseries:5.0.6-1.0.0
 ```
 
