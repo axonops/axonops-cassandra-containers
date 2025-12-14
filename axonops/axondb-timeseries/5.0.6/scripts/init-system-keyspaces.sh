@@ -8,14 +8,16 @@ set -euo pipefail
 #          on first-time cluster bootstrap (ONLY if safe to do so)
 # ============================================================================
 
-# Semaphore file for healthcheck coordination
-SEMAPHORE_FILE="/etc/axonops/init-system-keyspaces.done"
+# Semaphore files for healthcheck coordination
+# Located in /var/lib/cassandra (persistent volume) to survive container restarts
+SEMAPHORE_DIR="/var/lib/cassandra/.axonops"
+SEMAPHORE_FILE="${SEMAPHORE_DIR}/init-system-keyspaces.done"
 
 # Helper function to write semaphore on exit
 write_semaphore() {
   local result="$1"
   local reason="${2:-}"
-  mkdir -p /etc/axonops
+  mkdir -p "$SEMAPHORE_DIR"
   echo "COMPLETED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$SEMAPHORE_FILE"
   echo "RESULT=$result" >> "$SEMAPHORE_FILE"
   [ -n "$reason" ] && echo "REASON=$reason" >> "$SEMAPHORE_FILE"
@@ -30,16 +32,19 @@ echo "=========================================================="
 # Get native transport port from cassandra.yaml (default 9042)
 CQL_PORT=$(grep '^native_transport_port:' /etc/cassandra/cassandra.yaml | awk '{print $2}' || echo "9042")
 
-echo "Waiting for CQL port $CQL_PORT to be listening..."
-MAX_WAIT=600  # 10 minutes
+# Timeout configurable via environment variable (default: 10 minutes)
+MAX_WAIT="${INIT_TIMEOUT:-600}"
+
+echo "Waiting for CQL port $CQL_PORT to be listening (timeout: ${MAX_WAIT}s)..."
 ELAPSED=0
 
-echo "Waiting ${MAX_WAIT}s, for CQL port to open..."
 until nc -z localhost "$CQL_PORT" 2>/dev/null; do
   if [ $ELAPSED -gt $MAX_WAIT ]; then
-    echo "⚠ CQL port did not open within ${MAX_WAIT}s, skipping system keyspace init"
-    write_semaphore "skipped" "cql_port_timeout"
-    exit 0
+    echo "⚠ ERROR: CQL port did not open within ${MAX_WAIT}s"
+    echo "  This is a fatal error - Cassandra should have started by now"
+    echo "  Increase INIT_TIMEOUT env var if Cassandra needs more time to start"
+    write_semaphore "failed" "cql_port_timeout"
+    exit 1
   fi
   sleep 2
   ELAPSED=$((ELAPSED + 2))
@@ -50,15 +55,16 @@ echo "✓ CQL port $CQL_PORT is listening"
 # ============================================================================
 # 2. Wait for native transport and gossip to be enabled
 # ============================================================================
-echo "Waiting for native transport and gossip to be enabled..."
+echo "Waiting for native transport and gossip to be enabled (timeout: ${MAX_WAIT}s)..."
 ELAPSED=0
 
 until nodetool info 2>/dev/null | grep -q "Native Transport active.*: true" && \
       nodetool info 2>/dev/null | grep -q "Gossip active.*: true"; do
   if [ $ELAPSED -gt $MAX_WAIT ]; then
-    echo "⚠ Native transport/gossip did not become ready within ${MAX_WAIT}s, skipping"
-    write_semaphore "skipped" "native_transport_timeout"
-    exit 0
+    echo "⚠ ERROR: Native transport/gossip did not become ready within ${MAX_WAIT}s"
+    echo "  This is a fatal error - Cassandra internals should be active by now"
+    write_semaphore "failed" "native_transport_timeout"
+    exit 1
   fi
   sleep 2
   ELAPSED=$((ELAPSED + 2))
@@ -75,9 +81,11 @@ CQL_MAX_WAIT=60  # Wait up to 60 seconds for CQL authentication to be ready
 
 until cqlsh -u cassandra -p cassandra -e "SELECT now() FROM system.local LIMIT 1" > /dev/null 2>&1; do
   if [ $CQL_ELAPSED -gt $CQL_MAX_WAIT ]; then
-    echo "⚠ CQL connectivity check failed after ${CQL_MAX_WAIT}s, skipping system keyspace init"
-    write_semaphore "skipped" "cql_connectivity_failed"
-    exit 0
+    echo "⚠ ERROR: CQL connectivity check failed after ${CQL_MAX_WAIT}s"
+    echo "  Cannot connect with default cassandra/cassandra credentials"
+    echo "  Either authentication is not ready or credentials have been changed"
+    write_semaphore "failed" "cql_connectivity_failed"
+    exit 1
   fi
   sleep 2
   CQL_ELAPSED=$((CQL_ELAPSED + 2))
@@ -159,10 +167,11 @@ if [ -z "$DC_NAME" ]; then
 fi
 
 if [ -z "$DC_NAME" ]; then
-  echo "⚠ ERROR: Could not detect datacenter name from nodetool or cassandra-rackdc.properties"
-  echo "  Skipping system keyspace initialization to avoid misconfiguration"
-  write_semaphore "skipped" "dc_detection_failed"
-  exit 0
+  echo "⚠ ERROR: Could not detect datacenter name"
+  echo "  Tried nodetool status and cassandra-rackdc.properties"
+  echo "  Cannot convert system keyspaces without knowing the datacenter name"
+  write_semaphore "failed" "dc_detection_failed"
+  exit 1
 fi
 
 echo "✓ Detected datacenter: $DC_NAME"
@@ -207,12 +216,12 @@ write_semaphore "success" "initialized_to_nts"
 # ============================================================================
 # 11. Custom database user creation (if requested)
 # ============================================================================
-USER_SEMAPHORE_FILE="/etc/axonops/init-db-user.done"
+USER_SEMAPHORE_FILE="${SEMAPHORE_DIR}/init-db-user.done"
 
 write_user_semaphore() {
   local result="$1"
   local reason="${2:-}"
-  mkdir -p /etc/axonops
+  mkdir -p "$SEMAPHORE_DIR"
   echo "COMPLETED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$USER_SEMAPHORE_FILE"
   echo "RESULT=$result" >> "$USER_SEMAPHORE_FILE"
   [ -n "$reason" ] && echo "REASON=$reason" >> "$USER_SEMAPHORE_FILE"
@@ -248,9 +257,10 @@ echo "✓ User '${AXONOPS_DB_USER}' does not exist, proceeding with creation"
 # Create custom superuser
 echo "Creating superuser '${AXONOPS_DB_USER}'..."
 cqlsh -u cassandra -p cassandra -e "CREATE ROLE IF NOT EXISTS '${AXONOPS_DB_USER}' WITH PASSWORD = '${AXONOPS_DB_PASSWORD}' AND SUPERUSER = true AND LOGIN = true;" || {
-  echo "⚠ Failed to create user '${AXONOPS_DB_USER}', skipping user initialization"
+  echo "⚠ ERROR: Failed to create user '${AXONOPS_DB_USER}'"
+  echo "  This is a fatal error - user credentials were provided but creation failed"
   write_user_semaphore "failed" "create_user_failed"
-  exit 0
+  exit 1
 }
 
 echo "✓ User '${AXONOPS_DB_USER}' created successfully"
@@ -258,11 +268,12 @@ echo "✓ User '${AXONOPS_DB_USER}' created successfully"
 # Test new user authentication
 echo "Testing authentication with new user '${AXONOPS_DB_USER}'..."
 if ! cqlsh -u "${AXONOPS_DB_USER}" -p "${AXONOPS_DB_PASSWORD}" -e "SELECT now() FROM system.local LIMIT 1" > /dev/null 2>&1; then
-  echo "⚠ Failed to authenticate with new user '${AXONOPS_DB_USER}'"
+  echo "⚠ ERROR: Failed to authenticate with new user '${AXONOPS_DB_USER}'"
+  echo "  User was created but authentication test failed - possible CQL issue"
   echo "  Rolling back: deleting user '${AXONOPS_DB_USER}'"
   cqlsh -u cassandra -p cassandra -e "DROP ROLE IF EXISTS '${AXONOPS_DB_USER}';" 2>/dev/null || true
   write_user_semaphore "failed" "new_user_auth_failed"
-  exit 0
+  exit 1
 fi
 
 echo "✓ Successfully authenticated with new user '${AXONOPS_DB_USER}'"

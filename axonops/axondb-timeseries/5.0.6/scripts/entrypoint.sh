@@ -147,13 +147,11 @@ _sed-in-place() {
 # Update seeds in cassandra.yaml
 _sed-in-place "/etc/cassandra/cassandra.yaml" -r 's/(- seeds:).*/\1 "'"$CASSANDRA_SEEDS"'"/'
 
-# If DC/Rack env vars are set, switch to GossipingPropertyFileSnitch (which reads rackdc.properties)
-if [ -n "$CASSANDRA_DC" ] || [ -n "$CASSANDRA_RACK" ]; then
-    export CASSANDRA_ENDPOINT_SNITCH="GossipingPropertyFileSnitch"
-fi
+# Note: endpoint_snitch is already set to GossipingPropertyFileSnitch in cassandra.yaml
+# This snitch reads DC/Rack from cassandra-rackdc.properties (updated below)
 
 # Apply CASSANDRA_* environment variables to cassandra.yaml
-for yaml in cluster_name num_tokens listen_address rpc_address broadcast_address broadcast_rpc_address endpoint_snitch; do
+for yaml in cluster_name num_tokens listen_address rpc_address broadcast_address broadcast_rpc_address; do
     var="CASSANDRA_${yaml^^}"
     val="${!var}"
     if [ "$val" ]; then
@@ -191,30 +189,31 @@ fi
 
 # Initialize system keyspaces and custom database user in background (non-blocking)
 # This will wait for Cassandra to be ready, then:
-#   1. Convert system keyspaces to NetworkTopologyStrategy (if INIT_SYSTEM_KEYSPACES=true)
+#   1. Convert system keyspaces to NetworkTopologyStrategy (if INIT_SYSTEM_KEYSPACES_AND_ROLES=true)
 #   2. Create custom superuser (if AXONOPS_DB_USER and AXONOPS_DB_PASSWORD are set)
 # Only runs on fresh single-node clusters with default credentials
-# Can be disabled by setting INIT_SYSTEM_KEYSPACES=false
-INIT_SYSTEM_KEYSPACES="${INIT_SYSTEM_KEYSPACES:-true}"
+# Can be disabled by setting INIT_SYSTEM_KEYSPACES_AND_ROLES=false
+INIT_SYSTEM_KEYSPACES_AND_ROLES="${INIT_SYSTEM_KEYSPACES_AND_ROLES:-true}"
 
-if [ "$INIT_SYSTEM_KEYSPACES" = "true" ]; then
-    echo "Starting initialization in background (keyspaces + user)..."
+if [ "$INIT_SYSTEM_KEYSPACES_AND_ROLES" = "true" ]; then
+    echo "Starting initialization in background (keyspaces + roles)..."
     (/usr/local/bin/init-system-keyspaces.sh > /var/log/cassandra/init-system-keyspaces.log 2>&1 &)
 else
-    echo "System keyspace initialization disabled (INIT_SYSTEM_KEYSPACES=false)"
+    echo "System keyspace and role initialization disabled (INIT_SYSTEM_KEYSPACES_AND_ROLES=false)"
     echo "Writing semaphore files to allow healthcheck to proceed..."
     # Write semaphores immediately so healthcheck doesn't block
-    mkdir -p /etc/axonops
+    # Located in /var/lib/cassandra (persistent volume) not /etc (ephemeral)
+    mkdir -p /var/lib/cassandra/.axonops
     {
         echo "COMPLETED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
         echo "RESULT=skipped"
         echo "REASON=disabled_by_env_var"
-    } > /etc/axonops/init-system-keyspaces.done
+    } > /var/lib/cassandra/.axonops/init-system-keyspaces.done
     {
         echo "COMPLETED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
         echo "RESULT=skipped"
         echo "REASON=init_disabled"
-    } > /etc/axonops/init-db-user.done
+    } > /var/lib/cassandra/.axonops/init-db-user.done
 fi
 
 echo ""

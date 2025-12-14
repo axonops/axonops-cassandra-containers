@@ -1,123 +1,117 @@
 #!/bin/bash
 # AxonDB Time-Series Health Check
 # Usage: healthcheck.sh {startup|liveness|readiness}
-# Parses cassandra.yaml for actual configuration values
 
 set -euo pipefail
 
 MODE="${1:-readiness}"
-CASSANDRA_CONF="${CASSANDRA_CONF:-/etc/cassandra/cassandra.yaml}"
+CQL_PORT="${CASSANDRA_NATIVE_TRANSPORT_PORT:-9042}"
 TIMEOUT="${HEALTH_CHECK_TIMEOUT:-10}"
 
 log() {
   echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [$MODE] $*" >&2
 }
 
-# Parse cassandra.yaml for configuration
-get_config_value() {
-  local key="$1"
-  local default="$2"
-  
-  if [ ! -f "$CASSANDRA_CONF" ]; then
-    log "WARNING: cassandra.yaml not found at $CASSANDRA_CONF, using default"
-    echo "$default"
-    return 0
-  fi
-  
-  # Extract value from cassandra.yaml (handles: key: value)
-  grep -E "^[[:space:]]*${key}:" "$CASSANDRA_CONF" | \
-    head -1 | \
-    sed -E "s/^[[:space:]]*${key}:[[:space:]]*//;s/#.*//" | \
-    xargs echo -n || echo "$default"
-}
-
-# Get CQL port (native_transport_port)
-get_cql_port() {
-  get_config_value "native_transport_port" "9042"
-}
-
-# Get listen address (listen_address)
-get_listen_address() {
-  get_config_value "listen_address" "127.0.0.1"
-}
-
 case "$MODE" in
   startup)
-    # Wait for init scripts to complete before marking startup as successful
+    # Lightweight startup check with init script coordination
     log "Checking if Cassandra is starting"
 
-    # Check if system keyspace init script semaphore exists
-    INIT_KEYSPACE_SEMAPHORE="/etc/axonops/init-system-keyspaces.done"
+    # CRITICAL: Check if system keyspace init script semaphore exists
+    # Located in /var/lib/cassandra (persistent volume) not /etc (ephemeral)
+    INIT_KEYSPACE_SEMAPHORE="/var/lib/cassandra/.axonops/init-system-keyspaces.done"
     if [ ! -f "$INIT_KEYSPACE_SEMAPHORE" ]; then
       log "Waiting for system keyspace init script to complete (semaphore not found)"
       exit 1
     fi
 
-    # Check if database user init script semaphore exists
-    INIT_USER_SEMAPHORE="/etc/axonops/init-db-user.done"
+    # CRITICAL: Check if database user init script semaphore exists
+    INIT_USER_SEMAPHORE="/var/lib/cassandra/.axonops/init-db-user.done"
     if [ ! -f "$INIT_USER_SEMAPHORE" ]; then
       log "Waiting for database user init script to complete (semaphore not found)"
       exit 1
     fi
 
-    # Check if nodetool responds
-    if timeout "$TIMEOUT" nodetool version > /dev/null 2>&1; then
-      log "Startup check passed (init scripts complete + nodetool responsive)"
-      exit 0
-    else
-      log "Cassandra not yet responsive"
+    # CRITICAL: Check RESULT field in semaphore files - fail if initialization failed
+    KEYSPACE_RESULT=$(grep "^RESULT=" "$INIT_KEYSPACE_SEMAPHORE" | cut -d'=' -f2)
+    if [ "$KEYSPACE_RESULT" = "failed" ]; then
+      KEYSPACE_REASON=$(grep "^REASON=" "$INIT_KEYSPACE_SEMAPHORE" | cut -d'=' -f2)
+      log "ERROR: System keyspace initialization failed: ${KEYSPACE_REASON}"
       exit 1
     fi
+
+    USER_RESULT=$(grep "^RESULT=" "$INIT_USER_SEMAPHORE" | cut -d'=' -f2)
+    if [ "$USER_RESULT" = "failed" ]; then
+      USER_REASON=$(grep "^REASON=" "$INIT_USER_SEMAPHORE" | cut -d'=' -f2)
+      log "ERROR: Database user initialization failed: ${USER_REASON}"
+      exit 1
+    fi
+
+    # Check if Cassandra process is running
+    if ! pgrep -f cassandra > /dev/null 2>&1; then
+      log "Cassandra process not running"
+      exit 1
+    fi
+
+    # Check if native transport port is listening
+    if ! nc -z localhost "$CQL_PORT" 2>/dev/null; then
+      log "CQL port $CQL_PORT not listening"
+      exit 1
+    fi
+
+    log "Startup check passed (init: ${KEYSPACE_RESULT}/${USER_RESULT}, process running, port listening)"
+    exit 0
     ;;
-    
+
   liveness)
-    # Check if JMX/nodetool is responsive
+    # Ultra-lightweight liveness check (runs every 10 seconds)
     log "Checking liveness"
-    if timeout "$TIMEOUT" nodetool status > /dev/null 2>&1; then
-      log "Liveness check passed"
-      exit 0
-    else
-      log "ERROR: nodetool unresponsive"
+
+    # Check if Cassandra process is running
+    if ! pgrep -f cassandra > /dev/null 2>&1; then
+      log "ERROR: Cassandra process not running"
       exit 1
     fi
+
+    # Check if native transport port is listening
+    if ! nc -z localhost "$CQL_PORT" 2>/dev/null; then
+      log "ERROR: CQL port $CQL_PORT not listening"
+      exit 1
+    fi
+
+    log "Liveness check passed (process running + port listening)"
+    exit 0
     ;;
-    
+
   readiness)
     log "Checking readiness"
-    
-    # Parse configuration from cassandra.yaml
-    CQL_PORT=$(get_cql_port)
-    LISTEN_ADDRESS=$(get_listen_address)
-    log "Using CQL_PORT=$CQL_PORT, LISTEN_ADDRESS=$LISTEN_ADDRESS"
-    
-    # Get node state from nodetool status
-    IP=$(hostname -i)
-    STATE=$(timeout "$TIMEOUT" nodetool status 2>/dev/null | awk -v ip="$IP" '$2 == ip {print $1; exit}')
-    log "Node state: ${STATE:-UNKNOWN}"
-    
-    if [ "$STATE" != "UN" ]; then
-      log "ERROR: Node not UN (current: ${STATE:-UNKNOWN})"
+
+    # Check if native transport port is listening
+    if ! nc -z localhost "$CQL_PORT" 2>/dev/null; then
+      log "ERROR: CQL port $CQL_PORT not listening"
       exit 1
     fi
-    
-    # Check native transport is active via nodetool info
+
+    # Check native transport and gossip via nodetool info
     INFO=$(timeout "$TIMEOUT" nodetool info 2>/dev/null)
-    
-    if ! echo "$INFO" | grep -q "Native Transport active: true"; then
+
+    # Handle variable whitespace in nodetool info output (e.g., "Native Transport active          : true")
+    if ! echo "$INFO" | grep -E "Native Transport active[[:space:]]*:[[:space:]]*true" > /dev/null; then
       log "ERROR: Native transport not active"
       echo "$INFO" | grep "Native Transport" >&2 || true
       exit 1
     fi
-    
-    if ! echo "$INFO" | grep -q "Gossip active: true"; then
-      log "WARNING: Gossip not active"
-      # Don't fail - might be temporary
+
+    if ! echo "$INFO" | grep -E "Gossip active[[:space:]]*:[[:space:]]*true" > /dev/null; then
+      log "ERROR: Gossip not active"
+      echo "$INFO" | grep "Gossip" >&2 || true
+      exit 1
     fi
-    
-    log "Readiness check passed (UN + native transport active)"
+
+    log "Readiness check passed (port listening + native transport active + gossip active)"
     exit 0
     ;;
-    
+
   *)
     log "ERROR: Invalid mode. Usage: $0 {startup|liveness|readiness}"
     exit 1
