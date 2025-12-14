@@ -162,6 +162,24 @@ docker buildx build \
 - `CASSANDRA_VERSION` - Cassandra version (e.g., 5.0.6)
 - `CQLAI_VERSION` - Version of cqlai to install (see [latest release](https://github.com/axonops/cqlai/releases))
 
+**Custom Configuration Files:**
+
+The container includes customized Cassandra configuration files optimized for container deployments:
+
+| File | Purpose | Key Customizations |
+|------|---------|-------------------|
+| `cassandra.yaml` | Core Cassandra settings | Production-ready defaults for time-series workloads |
+| `jvm-server.options` | JVM options | Memory settings, GC configuration |
+| `jvm17-server.options` | JDK 17 specific options | Shenandoah GC, heap settings (default 8G) |
+| `cassandra-env.sh` | Cassandra environment | JVM parameters, memory optimization |
+| `logback.xml` | Logging configuration | Reduced retention (1GB total, 7 days), debug logging disabled for production |
+
+**logback.xml highlights:**
+- **SYSTEMLOG** (system.log): INFO level, 50MB files, 7 day retention, **1GB total cap** (reduced from default 5GB)
+- **DEBUGLOG** (debug.log): Disabled by default (can be enabled by uncommenting appender-ref)
+- **Audit logging**: Infrastructure present but disabled (can be enabled in cassandra.yaml if needed)
+- Optimized for container environments with controlled log growth
+
 **Optional build arguments (enhance metadata but aren't required):**
 - `BUILD_DATE` - Build timestamp (ISO 8601 format, e.g., `$(date -u +"%Y-%m-%dT%H:%M:%SZ")`)
 - `VCS_REF` - Git commit SHA (e.g., `$(git rev-parse HEAD)`)
