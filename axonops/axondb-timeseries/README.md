@@ -20,8 +20,7 @@ Production-ready Apache Cassandra 5.0.6 container optimized for time-series work
   - [Entrypoint Script](#entrypoint-script)
   - [Startup Version Banner](#startup-version-banner)
   - [Healthcheck Probes](#healthcheck-probes)
-  - [Automated System Keyspace Initialization](#automated-system-keyspace-initialization)
-  - [Custom Database User Creation](#custom-database-user-creation)
+  - [Automated Initialization (System Keyspaces and Database User)](#automated-initialization-system-keyspaces-and-database-user)
 - [CI/CD Pipeline](#cicd-pipeline)
   - [Workflows](#workflows)
   - [Automated Testing](#automated-testing)
@@ -506,9 +505,9 @@ docker exec axondb /usr/local/bin/healthcheck.sh readiness
 
 **Note:** Healthcheck probe configuration is handled automatically by AxonOps Helm charts. The above modes are available for custom deployments if needed.
 
-### Automated System Keyspace Initialization
+### Automated Initialization (System Keyspaces and Database User)
 
-On first boot, the container automatically converts system keyspaces to `NetworkTopologyStrategy` using a background initialization pattern.
+The container performs automated initialization on first boot, handling both system keyspace conversion and optional custom database user creation. Both operations are performed by a single background script (`init-system-keyspaces.sh`) that runs after Cassandra starts.
 
 #### How It Works (Execution Flow)
 
@@ -546,6 +545,11 @@ The initialization uses an **asynchronous background process** coordinated by **
 2. **Background execution** - Init doesn't block Cassandra startup
 3. **Semaphore coordination** - Healthcheck waits for init completion before marking ready
 4. **Kubernetes enforcement** - Pod not marked "Started" until semaphores exist
+5. **Persistent semaphores** - Stored in `/var/lib/cassandra` (volume), prevents re-init on restarts
+
+#### Phase 1: System Keyspace Conversion
+
+The first phase converts system keyspaces from `SimpleStrategy` to `NetworkTopologyStrategy` for production readiness.
 
 **What it does:**
 1. Waits for Cassandra to be ready (CQL port listening, native transport active)
@@ -561,23 +565,52 @@ The initialization uses an **asynchronous background process** coordinated by **
 - Only runs if replication factor is 1 (skips if already customized and writes skip semaphore)
 - Only runs if using `SimpleStrategy` (skips if already `NetworkTopologyStrategy` and writes skip semaphore)
 - Requires default `cassandra/cassandra` credentials
-- **Semaphores are ALWAYS written** (success or skipped with reason) to allow healthcheck to proceed
+- **Semaphore is ALWAYS written** (success or skipped with reason)
 
-**Logs:**
+#### Phase 2: Custom Database User Creation (Optional)
+
+The second phase creates a custom superuser and disables the default `cassandra` user (only if requested via environment variables).
+
+**What it does:**
+1. Waits for system keyspace initialization to complete
+2. Creates new superuser with specified username and password
+3. Grants full superuser permissions
+4. Tests authentication with new user
+5. Disables default `cassandra` user (sets `can_login=false`)
+6. Writes completion semaphore: `/var/lib/cassandra/.axonops/init-db-user.done`
+
+**Example:**
 ```bash
-# View initialization logs
-docker exec axondb cat /var/log/cassandra/init-system-keyspaces.log
+docker run -d --name axondb \
+  -e AXONOPS_DB_USER=dbadmin \
+  -e AXONOPS_DB_PASSWORD=MySecurePassword123! \
+  -e INIT_SYSTEM_KEYSPACES=true \
+  ghcr.io/axonops/axondb-timeseries:5.0.6-1.0.0
 
-# Check semaphore status (in persistent volume)
-docker exec axondb cat /var/lib/cassandra/.axonops/init-system-keyspaces.done
+# Wait for initialization (~2 minutes)
+docker logs -f axondb
+
+# Connect with new credentials
+docker exec -it axondb cqlai -u dbadmin -p MySecurePassword123!
 ```
 
-**Disable if needed:**
+**Safety checks:**
+- Only runs if both `AXONOPS_DB_USER` and `AXONOPS_DB_PASSWORD` are set
+- Only runs on fresh clusters with default credentials
+- Tests new user authentication before disabling default user
+- Rolls back user creation if authentication test fails
+- **Semaphore is ALWAYS written** (success, skipped, or failed with reason)
+
+#### Control and Disable
+
+**Disable all initialization:**
 ```bash
 docker run -d --name axondb \
   -e INIT_SYSTEM_KEYSPACES=false \
   ghcr.io/axonops/axondb-timeseries:5.0.6-1.0.0
 ```
+
+When disabled, semaphore files are written immediately with `RESULT=skipped` to allow the healthcheck to proceed.
 
 #### Semaphore Files
 
@@ -602,49 +635,47 @@ RESULT=success
 REASON=initialized_to_nts
 ```
 
-**RESULT values:**
-- `success` - Operation completed successfully
-- `skipped` - Operation skipped (with REASON explaining why)
+**RESULT values for init-system-keyspaces.done:**
+- `success` - System keyspaces converted successfully
+  - `initialized_to_nts` - Converted to NetworkTopologyStrategy
+- `skipped` - Conversion skipped (with REASON)
   - `multi_node_cluster` - Multi-node cluster detected
   - `already_nts` - Already using NetworkTopologyStrategy
   - `custom_rf` - Replication factor != 1 (already customized)
   - `disabled_by_env_var` - INIT_SYSTEM_KEYSPACES=false
-  - `no_custom_user_requested` - No AXONOPS_DB_USER set
-- `failed` - Operation failed (with REASON explaining failure)
+  - `cql_port_timeout` - CQL port didn't open within 10 minutes
+  - `native_transport_timeout` - Native transport didn't activate
+  - `cql_connectivity_failed` - CQL connectivity check failed
+  - `dc_detection_failed` - Could not detect datacenter name
 
-**Guarantee:** Semaphore files are **ALWAYS** written in all code paths (success, skipped, or failed). The healthcheck startup probe requires both semaphore files to exist before marking the container as started.
+**RESULT values for init-db-user.done:**
+- `success` - Custom user created successfully
+  - `user_initialized` - User created and cassandra user disabled
+  - `user_created_cassandra_disable_failed` - User created but failed to disable cassandra user (non-fatal)
+- `skipped` - User creation skipped (with REASON)
+  - `no_custom_user_requested` - AXONOPS_DB_USER not set
+  - `user_already_exists` - Custom user already exists
+  - `init_disabled` - INIT_SYSTEM_KEYSPACES=false
+- `failed` - User creation failed (with REASON)
+  - `create_user_failed` - Failed to create user
+  - `new_user_auth_failed` - New user authentication test failed
 
-### Custom Database User Creation
+**Guarantee:** Both semaphore files are **ALWAYS** written in all code paths (success, skipped, or failed). The healthcheck startup probe requires both semaphore files to exist before marking the container as started.
 
-The container can automatically create a custom superuser and disable the default `cassandra` user:
+#### Initialization Logs
 
-**What it does:**
-1. Waits for system keyspace initialization to complete
-2. Creates new superuser with specified username and password
-3. Grants full superuser permissions
-4. Disables default `cassandra` user (sets `can_login=false`)
-5. Writes completion semaphore
+Check initialization progress and results:
 
-**Example:**
 ```bash
-docker run -d --name axondb \
-  -e AXONOPS_DB_USER=dbadmin \
-  -e AXONOPS_DB_PASSWORD=MySecurePassword123! \
-  ghcr.io/axonops/axondb-timeseries:5.0.6-1.0.0
+# View complete initialization log (both system keyspaces and user creation)
+docker exec axondb cat /var/log/cassandra/init-system-keyspaces.log
 
-# Wait for initialization (~2 minutes)
-docker logs -f axondb
+# Check system keyspace conversion status (in persistent volume)
+docker exec axondb cat /var/lib/cassandra/.axonops/init-system-keyspaces.done
 
-# Connect with new credentials
-docker exec -it axondb cqlai -u dbadmin -p MySecurePassword123!
+# Check custom user creation status (in persistent volume)
+docker exec axondb cat /var/lib/cassandra/.axonops/init-db-user.done
 ```
-
-**Important notes:**
-- Only works on fresh clusters with default credentials
-- Both `AXONOPS_DB_USER` and `AXONOPS_DB_PASSWORD` must be set
-- Password should be strong (mixed case, numbers, symbols)
-- Default `cassandra` user remains in `system_auth` but cannot log in
-- Runs automatically after system keyspace initialization
 
 ## CI/CD Pipeline
 
