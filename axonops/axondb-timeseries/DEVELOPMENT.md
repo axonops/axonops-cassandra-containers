@@ -226,27 +226,37 @@ Used by healthcheck `startup` probe to ensure initialization completes before ma
 
 **Script:** `scripts/healthcheck.sh`
 
+**Design Philosophy:** Optimized for minimal overhead with appropriate checks for each probe type.
+
 **Three Modes:**
 
 1. **startup** - For Kubernetes startupProbe
-   - Checks semaphore files exist
-   - Verifies nodetool responds
+   - Checks semaphore files exist (CRITICAL for async init coordination)
+     - `/etc/axonops/init-system-keyspaces.done`
+     - `/etc/axonops/init-db-user.done`
+   - Verifies Cassandra process running (`pgrep -f cassandra`)
+   - Checks CQL port (9042) listening via TCP (`nc`)
+   - **Lightweight** - No nodetool calls
    - Use during container startup phase
 
 2. **liveness** - For Kubernetes livenessProbe
-   - Fast check: `nodetool status` responsive
+   - **Ultra-lightweight** - Runs every 10 seconds, must be very fast
+   - Checks Cassandra process running (`pgrep -f cassandra`)
+   - Checks CQL port (9042) listening via TCP (`nc`)
+   - **No nodetool calls** - Minimal overhead
    - Detects if Cassandra process crashed
-   - Does NOT check node state (UN/DN)
 
 3. **readiness** - For Kubernetes readinessProbe (default)
-   - Node must be UN (Up/Normal)
-   - Native transport active
-   - Gossip active
+   - Checks CQL port (9042) listening via TCP (`nc`)
+   - Runs `nodetool info` to verify internal state
+   - Verifies "Native Transport active: true"
+   - Verifies "Gossip active: true"
+   - **More thorough** than startup/liveness
    - Use for load balancer health checks
 
 **Configuration:**
-- Parses `cassandra.yaml` for actual port/address config
-- Timeout configurable via `HEALTH_CHECK_TIMEOUT` env var (default: 10s)
+- CQL port: Configurable via `CASSANDRA_NATIVE_TRANSPORT_PORT` env var (default: 9042)
+- Timeout: Configurable via `HEALTH_CHECK_TIMEOUT` env var (default: 10s)
 
 ---
 

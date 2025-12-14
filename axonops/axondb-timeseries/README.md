@@ -456,27 +456,33 @@ docker logs axondb | head -30
 
 ### Healthcheck Probes
 
-The container includes a sophisticated healthcheck script supporting three probe types:
+The container includes an optimized healthcheck script supporting three probe types, designed for minimal overhead while ensuring reliability:
 
 **1. Startup Probe** (`healthcheck.sh startup`)
 - **Waits for initialization scripts to complete** (critical for async init pattern)
 - Checks for semaphore files:
   - `/etc/axonops/init-system-keyspaces.done` (system keyspace conversion)
   - `/etc/axonops/init-db-user.done` (custom user creation)
-- Verifies nodetool responds
+- Verifies Cassandra process is running (`pgrep -f cassandra`)
+- Checks CQL port (9042) is listening (TCP check via `nc`)
+- **Lightweight** - No nodetool calls, just process/port checks
 - **Blocks pod "Started" status until init completes**
 - Use for: Kubernetes `startupProbe` (ensures init finishes before traffic routing)
 
 **2. Liveness Probe** (`healthcheck.sh liveness`)
-- Checks if nodetool/JMX is responsive
-- Fast and lightweight check
-- Use for: Detecting if Cassandra process has crashed
+- **Ultra-lightweight** - Designed to run frequently (every 10 seconds)
+- Checks if Cassandra process is running (`pgrep -f cassandra`)
+- Checks CQL port (9042) is listening (TCP check via `nc`)
+- **No nodetool calls** - Minimal overhead, very fast execution
+- Use for: Kubernetes `livenessProbe` (detecting if Cassandra process has crashed)
 
 **3. Readiness Probe** (`healthcheck.sh readiness`)
-- Verifies node is `UN` (Up/Normal) state
-- Checks native transport (CQL) is active
-- Verifies gossip is active
-- Use for: Load balancer health checks
+- Checks CQL port (9042) is listening (TCP check via `nc`)
+- Runs `nodetool info` to verify Cassandra internal state
+- Verifies "Native Transport active: true" in output
+- Verifies "Gossip active: true" in output
+- **More thorough** than liveness - ensures Cassandra is fully operational
+- Use for: Kubernetes `readinessProbe` (load balancer health checks, traffic routing)
 
 **Docker healthcheck:**
 ```bash
