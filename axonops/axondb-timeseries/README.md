@@ -17,6 +17,7 @@ Production-ready Apache Cassandra 5.0.6 container optimized for time-series work
   - [Cassandra Configuration](#cassandra-configuration)
   - [Initialization Control](#initialization-control)
 - [Container Features](#container-features)
+  - [Entrypoint Script](#entrypoint-script)
   - [Startup Version Banner](#startup-version-banner)
   - [Healthcheck Probes](#healthcheck-probes)
   - [Automated System Keyspace Initialization](#automated-system-keyspace-initialization)
@@ -271,6 +272,109 @@ docker exec -it axondb cqlai -u admin -p SecurePassword123
 - Completion markers: `/etc/axonops/init-system-keyspaces.done` and `/etc/axonops/init-db-user.done`
 
 ## Container Features
+
+### Entrypoint Script
+
+The entrypoint script (`/usr/local/bin/docker-entrypoint.sh`) is the main orchestrator that configures Cassandra and manages container startup. It runs as PID 1 (via tini) and performs critical initialization before starting Cassandra.
+
+#### What It Does
+
+**1. Displays Startup Banner**
+- Sources build metadata from `/etc/axonops/build-info.txt`
+- Prints comprehensive version information (Cassandra, Java, cqlai, jemalloc, OS)
+- Shows runtime environment (Kubernetes detection, hostname)
+- Displays supply chain security info (base image digest)
+
+**2. Configures Network and IP Addresses**
+- Auto-detects container IP address if `CASSANDRA_LISTEN_ADDRESS=auto`
+- Sets broadcast addresses based on listen address
+- Configures RPC (CQL) addresses for client connections
+- Ensures proper seed node configuration
+
+**3. Applies Environment Variables to Cassandra Configuration**
+- Processes all `CASSANDRA_*` environment variables
+- Updates `cassandra.yaml` with user-provided settings
+- Modifies `cassandra-rackdc.properties` for DC/Rack configuration
+- Adjusts JVM heap size in `jvm17-server.options`
+- Automatically sets endpoint snitch to `GossipingPropertyFileSnitch` when DC/Rack are configured
+
+**4. Enables jemalloc Memory Optimization**
+- Sets `LD_PRELOAD=/usr/lib64/libjemalloc.so.2`
+- Improves memory allocation performance
+- Safe fallback if jemalloc not found
+
+**5. Launches Background Initialization**
+- Starts `init-system-keyspaces.sh` in background (non-blocking)
+- Or writes skip semaphores if `INIT_SYSTEM_KEYSPACES=false`
+- Allows Cassandra to start immediately while init waits for readiness
+
+**6. Starts Cassandra**
+- Executes `cassandra -f` (foreground mode)
+- Replaces entrypoint process (becomes PID 1)
+- Cassandra takes over as main container process
+
+#### Execution Order
+
+```
+entrypoint.sh (PID 1 via tini)
+  │
+  ├─► 1. Print startup banner
+  │
+  ├─► 2. Set default environment variables
+  │      (CASSANDRA_CLUSTER_NAME, CASSANDRA_DC, CASSANDRA_RACK, etc.)
+  │
+  ├─► 3. Resolve IP addresses
+  │      (auto-detect if CASSANDRA_LISTEN_ADDRESS=auto)
+  │
+  ├─► 4. Apply environment variables to cassandra.yaml
+  │      (cluster_name, num_tokens, listen_address, rpc_address, etc.)
+  │
+  ├─► 5. Apply DC/Rack to cassandra-rackdc.properties
+  │
+  ├─► 6. Apply heap size to jvm17-server.options
+  │
+  ├─► 7. Enable jemalloc (set LD_PRELOAD)
+  │
+  ├─► 8. Launch init-system-keyspaces.sh in background (&)
+  │      - Non-blocking, runs in parallel with Cassandra
+  │
+  └─► 9. exec cassandra -f
+         - Replaces entrypoint process
+         - Cassandra becomes PID 1
+         - Container runs Cassandra from this point
+```
+
+#### Configuration Files Modified
+
+The entrypoint modifies these Cassandra configuration files based on environment variables:
+
+| File | What's Modified | Environment Variables |
+|------|----------------|----------------------|
+| `/etc/cassandra/cassandra.yaml` | Core Cassandra settings | `CASSANDRA_CLUSTER_NAME`, `CASSANDRA_NUM_TOKENS`, `CASSANDRA_LISTEN_ADDRESS`, `CASSANDRA_RPC_ADDRESS`, `CASSANDRA_BROADCAST_ADDRESS`, `CASSANDRA_BROADCAST_RPC_ADDRESS`, `CASSANDRA_SEEDS` |
+| `/etc/cassandra/cassandra-rackdc.properties` | Datacenter and rack topology | `CASSANDRA_DC`, `CASSANDRA_RACK` |
+| `/etc/cassandra/jvm17-server.options` | JVM heap memory settings | `CASSANDRA_HEAP_SIZE` |
+
+**Note:** The endpoint snitch is automatically set to `GossipingPropertyFileSnitch` when `CASSANDRA_DC` or `CASSANDRA_RACK` are provided. This snitch reads topology from `cassandra-rackdc.properties`.
+
+#### Key Design Decisions
+
+**Why exec cassandra -f?**
+- Using `exec` replaces the shell process with Cassandra
+- Cassandra becomes PID 1, receives signals directly
+- Ensures clean shutdown when container stops
+- No orphaned shell process consuming resources
+
+**Why background initialization?**
+- Init script needs Cassandra running (requires CQL access)
+- Starting Cassandra first allows init to wait for readiness
+- Non-blocking startup - container doesn't hang during init
+- Healthcheck startup probe enforces completion before traffic routing
+
+**Why tini?**
+- Minimal init system that properly handles signals
+- Reaps zombie processes
+- Ensures clean shutdown of all child processes
+- Industry best practice for containers
 
 ### Startup Version Banner
 
