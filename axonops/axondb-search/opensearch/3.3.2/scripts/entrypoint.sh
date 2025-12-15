@@ -105,6 +105,10 @@ export OPENSEARCH_NODE_NAME="${OPENSEARCH_NODE_NAME:-${HOSTNAME}}"
 export OPENSEARCH_NETWORK_HOST="${OPENSEARCH_NETWORK_HOST:-0.0.0.0}"
 export OPENSEARCH_DISCOVERY_TYPE="${OPENSEARCH_DISCOVERY_TYPE:-single-node}"
 
+# TLS/SSL settings (default: enabled)
+# When false, disables HTTPS on REST API (useful when TLS terminated at load balancer)
+export AXONOPS_SEARCH_TLS_ENABLED="${AXONOPS_SEARCH_TLS_ENABLED:-true}"
+
 # JVM heap settings (default: 8G, matches AxonDB Time-Series)
 export OPENSEARCH_HEAP_SIZE="${OPENSEARCH_HEAP_SIZE:-8g}"
 
@@ -114,6 +118,7 @@ echo "  Node Name:          ${OPENSEARCH_NODE_NAME}"
 echo "  Network Host:       ${OPENSEARCH_NETWORK_HOST}"
 echo "  Discovery Type:     ${OPENSEARCH_DISCOVERY_TYPE}"
 echo "  Heap Size:          ${OPENSEARCH_HEAP_SIZE}"
+echo "  TLS Enabled:        ${AXONOPS_SEARCH_TLS_ENABLED}"
 echo ""
 
 # Apply environment variable substitutions to opensearch.yml
@@ -150,6 +155,21 @@ fi
 if [ -n "$OPENSEARCH_HEAP_SIZE" ]; then
     _sed-in-place "/etc/opensearch/jvm.options" -r 's/^-Xms[0-9]+[GgMm]$/-Xms'"$OPENSEARCH_HEAP_SIZE"'/'
     _sed-in-place "/etc/opensearch/jvm.options" -r 's/^-Xmx[0-9]+[GgMm]$/-Xmx'"$OPENSEARCH_HEAP_SIZE"'/'
+fi
+
+# Disable HTTP SSL if AXONOPS_SEARCH_TLS_ENABLED=false
+# This is useful when TLS is terminated at load balancer/ingress
+# Transport layer SSL remains enabled for node-to-node communication
+if [ "$AXONOPS_SEARCH_TLS_ENABLED" = "false" ]; then
+    echo "Disabling HTTP SSL (AXONOPS_SEARCH_TLS_ENABLED=false)"
+    echo "  TLS will be terminated at load balancer/ingress"
+    echo "  Transport layer SSL remains enabled for node-to-node communication"
+    # Add or update the HTTP SSL setting in opensearch.yml
+    if grep -q "plugins.security.ssl.http.enabled" /etc/opensearch/opensearch.yml; then
+        _sed-in-place "/etc/opensearch/opensearch.yml" -r 's/^(# )?(plugins\.security\.ssl\.http\.enabled:).*/\2 false/'
+    else
+        echo "plugins.security.ssl.http.enabled: false" >> /etc/opensearch/opensearch.yml
+    fi
 fi
 
 echo "✓ Configuration applied to opensearch.yml"

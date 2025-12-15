@@ -22,6 +22,14 @@ HTTP_PORT="${OPENSEARCH_HTTP_PORT:-9200}"
 INIT_TIMEOUT="${INIT_TIMEOUT:-600}"  # Configurable timeout (default: 10 minutes)
 DISABLE_SECURITY_PLUGIN="${DISABLE_SECURITY_PLUGIN:-false}"
 
+# TLS/SSL settings
+AXONOPS_SEARCH_TLS_ENABLED="${AXONOPS_SEARCH_TLS_ENABLED:-true}"
+if [ "$AXONOPS_SEARCH_TLS_ENABLED" = "false" ]; then
+    PROTOCOL="http"
+else
+    PROTOCOL="https"
+fi
+
 # Admin user credentials
 AXONOPS_SEARCH_USER="${AXONOPS_SEARCH_USER}"
 AXONOPS_SEARCH_PASSWORD="${AXONOPS_SEARCH_PASSWORD}"
@@ -95,13 +103,7 @@ echo "Waiting for OpenSearch cluster to be responsive..."
 ELAPSED=0
 while true; do
     # Try to get cluster health (may fail initially)
-    # Use HTTPS if security is enabled, HTTP if disabled
-    if [ "$DISABLE_SECURITY_PLUGIN" = "true" ]; then
-        PROTOCOL="http"
-    else
-        PROTOCOL="https"
-    fi
-
+    # Use HTTP or HTTPS based on TLS setting
     if timeout 5 curl -s --insecure -u admin:MyS3cur3P@ss2025 -XGET "${PROTOCOL}://localhost:${HTTP_PORT}/_cluster/health" >/dev/null 2>&1; then
         echo "✓ OpenSearch cluster is responsive"
         break
@@ -138,6 +140,19 @@ if [ -n "$AXONOPS_SEARCH_USER" ] && [ -n "$AXONOPS_SEARCH_PASSWORD" ]; then
     echo "=== Custom Admin User Creation ==="
     echo "  Username: $AXONOPS_SEARCH_USER"
     echo ""
+
+    # Check if TLS is enabled (required for securityadmin tool)
+    if [ "$AXONOPS_SEARCH_TLS_ENABLED" = "false" ]; then
+        echo "⚠ WARNING: Cannot create custom user when TLS is disabled"
+        echo "  The securityadmin tool requires TLS/HTTPS to apply security configuration"
+        echo "  Please either:"
+        echo "    1. Enable TLS (AXONOPS_SEARCH_TLS_ENABLED=true) to create custom users"
+        echo "    2. Use the default admin user (admin / MyS3cur3P@ss2025)"
+        echo "    3. Create users manually via OpenSearch REST API after startup"
+        echo ""
+        write_semaphore "skipped" "tls_disabled_no_securityadmin"
+        exit 0
+    fi
 
     # Generate password hash
     echo "Generating password hash for user..."
