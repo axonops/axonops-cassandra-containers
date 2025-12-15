@@ -1,0 +1,224 @@
+#!/bin/bash
+set -e
+
+# AxonDB Time-Series Entrypoint Script
+# Processes cassandra.yaml template with environment variables and starts Cassandra
+
+# Display comprehensive startup banner
+print_startup_banner() {
+    if [ -f /etc/axonops/build-info.txt ]; then
+      source /etc/axonops/build-info.txt 2>/dev/null || true
+    fi
+
+    echo "================================================================================"
+    # Title
+    echo "AxonOps AxonDB Time-Series (Apache Cassandra ${CASSANDRA_VERSION:-unknown})"
+
+    # Image and build info (CI builds only - not shown for local/unknown builds)
+    if [ -n "${CONTAINER_IMAGE}" ] && [ "${CONTAINER_IMAGE}" != "unknown" ] && [ "${CONTAINER_IMAGE}" != "" ]; then
+      echo "Image: ${CONTAINER_IMAGE}"
+    fi
+    if [ -n "${CONTAINER_BUILD_DATE}" ] && [ "${CONTAINER_BUILD_DATE}" != "unknown" ] && [ "${CONTAINER_BUILD_DATE}" != "" ]; then
+      echo "Built: ${CONTAINER_BUILD_DATE}"
+    fi
+
+    # Show release/tag link if available (CI builds)
+    if [ -n "${CONTAINER_GIT_TAG}" ] && [ "${CONTAINER_GIT_TAG}" != "unknown" ] && [ "${CONTAINER_GIT_TAG}" != "" ]; then
+      if [ "${IS_PRODUCTION_RELEASE:-false}" = "true" ]; then
+        # Production build - link to release page (has release notes)
+        echo "Release: https://github.com/axonops/axonops-containers/releases/tag/${CONTAINER_GIT_TAG}"
+      else
+        # Development build - link to tag/tree
+        echo "Tag:     https://github.com/axonops/axonops-containers/tree/${CONTAINER_GIT_TAG}"
+      fi
+    fi
+
+    # Show who built it if available (CI builds)
+    if [ -n "${CONTAINER_BUILT_BY}" ] && [ "${CONTAINER_BUILT_BY}" != "unknown" ] && [ "${CONTAINER_BUILT_BY}" != "" ]; then
+      if [ "${CONTAINER_BUILT_BY}" = "GitHub Actions" ] || [ "${IS_PRODUCTION_RELEASE:-false}" = "true" ]; then
+        echo "Built by: ${CONTAINER_BUILT_BY}"
+      fi
+    fi
+
+    echo "================================================================================"
+    echo ""
+
+    # Component versions (from build-info.txt)
+    echo "Component Versions:"
+    echo "  Cassandra:          ${CASSANDRA_VERSION:-unknown}"
+    echo "  Java:               ${JAVA_VERSION:-unknown}"
+    echo "  cqlai:              ${CQLAI_VERSION:-unknown}"
+    echo "  jemalloc:           ${JEMALLOC_VERSION:-unknown}"
+    echo "  OS:                 ${OS_VERSION:-unknown}"
+    echo "  Platform:           ${PLATFORM:-unknown}"
+    echo ""
+
+    # Supply chain verification (base image digest for security audit)
+    echo "Supply Chain Security:"
+    echo "  Base image:         registry.access.redhat.com/ubi9/ubi-minimal:latest"
+    echo "  Base image digest:  ${UBI9_BASE_DIGEST:-unknown}"
+    echo ""
+
+    # Runtime environment (dynamic - only knowable at runtime)
+    echo "Runtime Environment:"
+    echo "  Hostname:           $(hostname 2>/dev/null || echo 'unknown')"
+
+    # Kubernetes detection (safe - only if vars exist)
+    if [ -n "${KUBERNETES_SERVICE_HOST}" ]; then
+      echo "  Kubernetes:         Yes"
+      echo "    API Server:       ${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
+      if [ -n "${HOSTNAME}" ]; then
+        echo "    Pod:              ${HOSTNAME}"
+      fi
+    fi
+    echo ""
+
+    echo "================================================================================"
+    echo "Starting Cassandra..."
+    echo "================================================================================"
+    echo ""
+}
+
+print_startup_banner
+
+# Helper function to get container IP address
+_ip_address() {
+    # scrape the first non-localhost IP address of the container
+    ip address | awk '
+        $1 == "inet" && $NF != "lo" {
+            gsub(/\/.+$/, "", $2)
+            print $2
+            exit
+        }
+    '
+}
+
+# Set default environment variables if not provided
+export CASSANDRA_CLUSTER_NAME="${CASSANDRA_CLUSTER_NAME:-axonopsdb-timeseries}"
+export CASSANDRA_NUM_TOKENS="${CASSANDRA_NUM_TOKENS:-8}"
+export CASSANDRA_LISTEN_ADDRESS="${CASSANDRA_LISTEN_ADDRESS:-auto}"
+export CASSANDRA_RPC_ADDRESS="${CASSANDRA_RPC_ADDRESS:-0.0.0.0}"
+export CASSANDRA_DC="${CASSANDRA_DC:-axonopsdb_dc1}"
+export CASSANDRA_RACK="${CASSANDRA_RACK:-rack1}"
+
+# Resolve 'auto' to actual IP address
+if [ "$CASSANDRA_LISTEN_ADDRESS" = 'auto' ]; then
+    CASSANDRA_LISTEN_ADDRESS="$(_ip_address)"
+fi
+
+# Set broadcast addresses if not specified
+if [ -z "$CASSANDRA_BROADCAST_ADDRESS" ]; then
+    CASSANDRA_BROADCAST_ADDRESS="$CASSANDRA_LISTEN_ADDRESS"
+fi
+
+# If RPC address is 0.0.0.0 (wildcard), broadcast_rpc_address must be set to actual IP
+if [ "$CASSANDRA_RPC_ADDRESS" = "0.0.0.0" ] && [ -z "$CASSANDRA_BROADCAST_RPC_ADDRESS" ]; then
+    CASSANDRA_BROADCAST_RPC_ADDRESS="$CASSANDRA_LISTEN_ADDRESS"
+fi
+
+# Set seeds - default to the node's own IP for single-node deployments
+if [ -z "$CASSANDRA_SEEDS" ]; then
+    CASSANDRA_SEEDS="$CASSANDRA_BROADCAST_ADDRESS"
+fi
+
+# JVM heap settings
+export CASSANDRA_HEAP_SIZE="${CASSANDRA_HEAP_SIZE:-8G}"
+
+echo "Configuration:"
+echo "  Cluster Name:       ${CASSANDRA_CLUSTER_NAME}"
+echo "  DC/Rack:            ${CASSANDRA_DC}/${CASSANDRA_RACK}"
+echo "  Num Tokens:         ${CASSANDRA_NUM_TOKENS}"
+echo "  Listen Address:     ${CASSANDRA_LISTEN_ADDRESS}"
+echo "  RPC Address:        ${CASSANDRA_RPC_ADDRESS}"
+echo "  Heap Size:          ${CASSANDRA_HEAP_SIZE}"
+echo ""
+
+# Apply environment variable substitutions to cassandra.yaml
+# Copied from base image's docker-entrypoint.sh sed logic
+_sed-in-place() {
+    local filename="$1"; shift
+    local tempFile
+    tempFile="$(mktemp)"
+    sed "$@" "$filename" > "$tempFile"
+    cat "$tempFile" > "$filename"
+    rm "$tempFile"
+}
+
+# Update seeds in cassandra.yaml
+_sed-in-place "/etc/cassandra/cassandra.yaml" -r 's/(- seeds:).*/\1 "'"$CASSANDRA_SEEDS"'"/'
+
+# Note: endpoint_snitch is already set to GossipingPropertyFileSnitch in cassandra.yaml
+# This snitch reads DC/Rack from cassandra-rackdc.properties (updated below)
+
+# Apply CASSANDRA_* environment variables to cassandra.yaml
+for yaml in cluster_name num_tokens listen_address rpc_address broadcast_address broadcast_rpc_address; do
+    var="CASSANDRA_${yaml^^}"
+    val="${!var}"
+    if [ "$val" ]; then
+        _sed-in-place "/etc/cassandra/cassandra.yaml" -r 's/^(# )?('"$yaml"':).*/\2 '"$val"'/'
+    fi
+done
+
+# Apply DC/Rack to cassandra-rackdc.properties (handle space after =)
+for rackdc in dc rack; do
+    var="CASSANDRA_${rackdc^^}"
+    val="${!var}"
+    if [ "$val" ]; then
+        _sed-in-place "/etc/cassandra/cassandra-rackdc.properties" -r 's/^('"$rackdc"')\s*=.*/\1='"$val"'/'
+    fi
+done
+
+# Apply heap size override to jvm17-server.options if env var set
+if [ -n "$CASSANDRA_HEAP_SIZE" ]; then
+    _sed-in-place "/etc/cassandra/jvm17-server.options" -r 's/^-Xms[0-9]+[GgMm]$/-Xms'"$CASSANDRA_HEAP_SIZE"'/'
+    _sed-in-place "/etc/cassandra/jvm17-server.options" -r 's/^-Xmx[0-9]+[GgMm]$/-Xmx'"$CASSANDRA_HEAP_SIZE"'/'
+fi
+
+echo "✓ Configuration applied to cassandra.yaml"
+echo ""
+
+# Enable jemalloc for memory optimization (UBI path)
+if [ -f /usr/lib64/libjemalloc.so.2 ]; then
+    export LD_PRELOAD=/usr/lib64/libjemalloc.so.2
+    echo "✓ jemalloc enabled"
+else
+    echo "⚠ jemalloc not found, continuing without it"
+fi
+
+# JVM options are set in jvm17-server.options (including Shenandoah GC)
+
+# Initialize system keyspaces and custom database user in background (non-blocking)
+# This will wait for Cassandra to be ready, then:
+#   1. Convert system keyspaces to NetworkTopologyStrategy (if INIT_SYSTEM_KEYSPACES_AND_ROLES=true)
+#   2. Create custom superuser (if AXONOPS_DB_USER and AXONOPS_DB_PASSWORD are set)
+# Only runs on fresh single-node clusters with default credentials
+# Can be disabled by setting INIT_SYSTEM_KEYSPACES_AND_ROLES=false
+INIT_SYSTEM_KEYSPACES_AND_ROLES="${INIT_SYSTEM_KEYSPACES_AND_ROLES:-true}"
+
+if [ "$INIT_SYSTEM_KEYSPACES_AND_ROLES" = "true" ]; then
+    echo "Starting initialization in background (keyspaces + roles)..."
+    (/usr/local/bin/init-system-keyspaces.sh > /var/log/cassandra/init-system-keyspaces.log 2>&1 &)
+else
+    echo "System keyspace and role initialization disabled (INIT_SYSTEM_KEYSPACES_AND_ROLES=false)"
+    echo "Writing semaphore files to allow healthcheck to proceed..."
+    # Write semaphores immediately so healthcheck doesn't block
+    # Located in /var/lib/cassandra (persistent volume) not /etc (ephemeral)
+    mkdir -p /var/lib/cassandra/.axonops
+    {
+        echo "COMPLETED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        echo "RESULT=skipped"
+        echo "REASON=disabled_by_env_var"
+    } > /var/lib/cassandra/.axonops/init-system-keyspaces.done
+    {
+        echo "COMPLETED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        echo "RESULT=skipped"
+        echo "REASON=init_disabled"
+    } > /var/lib/cassandra/.axonops/init-db-user.done
+fi
+
+echo ""
+echo "=== Starting Cassandra ==="
+echo ""
+
+# Execute command (CMD is ["cassandra", "-f"] which gets passed as $@)
+exec "$@"

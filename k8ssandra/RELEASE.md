@@ -2,17 +2,19 @@
 
 This document describes how to create and publish K8ssandra container releases for both development and production.
 
+**Important:** All images are cryptographically signed with Sigstore Cosign using keyless signing. Use the `-signed` workflows for all new releases.
+
 ## Overview
 
 The release process uses separate workflows for development and production:
 
 **Development Workflow:**
 1. **k8ssandra-build-and-test.yml** - Automatic testing on pushes/PRs to `development`
-2. **development-k8ssandra-publish.yml** - Manual publishing to development registry
+2. **k8ssandra-development-publish-signed.yml** - Manual publishing to development registry (Cosign signed)
 
 **Production Workflow:**
 1. **k8ssandra-build-and-test.yml** - Automatic testing on pushes/PRs to `main`
-2. **k8ssandra-publish.yml** - Manual publishing to production registry
+2. **k8ssandra-publish-signed.yml** - Manual publishing to production registry (Cosign signed)
 
 This approach ensures:
 - Testing happens on both development and main branches
@@ -58,20 +60,21 @@ git pull origin development
 git tag dev-1.0.0
 git push origin dev-1.0.0
 
-# Trigger development publish workflow
-gh workflow run development-k8ssandra-publish.yml \
+# Trigger development publish workflow (--ref development ensures correct branch)
+gh workflow run k8ssandra-development-publish-signed.yml \
+  --ref development \
   -f dev_git_tag=dev-1.0.0 \
   -f container_version=dev-1.0.0
 ```
 
-**Images published to:**
-- `ghcr.io/axonops/development-axonops-cassandra-containers:5.0.6-dev-1.0.0`
-- `ghcr.io/axonops/development-axonops-cassandra-containers:5.0.5-dev-1.0.0`
-- `ghcr.io/axonops/development-axonops-cassandra-containers:5.0.4-dev-1.0.0`
+**Images published to (with 3D versioning):**
+- `ghcr.io/axonops/development/k8ssandra/cassandra:5.0.6-v0.1.110-dev-1.0.0`
+- `ghcr.io/axonops/development/k8ssandra/cassandra:5.0.5-v0.1.110-dev-1.0.0`
+- `ghcr.io/axonops/development/k8ssandra/cassandra:5.0.4-v0.1.110-dev-1.0.0`
 
 **Testing development images:**
 ```bash
-docker pull ghcr.io/axonops/development-axonops-cassandra-containers:5.0.6-dev-1.0.0
+docker pull ghcr.io/axonops/development/k8ssandra/cassandra:5.0.6-v0.1.110-dev-1.0.0
 # Run tests, validate functionality
 ```
 
@@ -136,8 +139,13 @@ git push origin 1.0.0
 # Authenticate
 gh auth login
 
-# Trigger the workflow
-gh workflow run k8ssandra-publish.yml \
+# IMPORTANT: Ensure you're on main branch first
+git checkout main
+git pull origin main
+
+# Trigger the signed workflow (--ref main ensures correct branch)
+gh workflow run k8ssandra-publish-signed.yml \
+  --ref main \
   -f main_git_tag=1.0.0 \
   -f container_version=1.0.0
 
@@ -147,7 +155,7 @@ gh run watch
 
 ### 4. Workflow Execution
 
-The publish workflow performs these steps:
+The signed publish workflow performs these steps:
 
 1. **Validate** - Checks if `container_version` already exists in GHCR
    - Fails if any image tag `*-container_version` exists
@@ -168,11 +176,19 @@ The publish workflow performs these steps:
    - Platforms: `linux/amd64`, `linux/arm64`
 
 5. **Publish** - Pushes images to GHCR
-   - Tags: `5.0.6-1.0.0`, `5.0.5-1.0.0`, `5.0.4-1.0.0`
-   - Registry: `ghcr.io/axonops/axonops-cassandra-containers`
+   - Multi-dimensional tags: immutable, patch-latest, minor-latest, global-latest
+   - Registry: `ghcr.io/axonops/k8ssandra/cassandra`
 
-6. **Create Release** - Creates GitHub Release
-   - Name: `k8ssandra-<container_version>` (e.g., `k8ssandra-1.0.0`)
+6. **Sign** - Cryptographically sign images with Cosign
+   - Keyless signing using GitHub OIDC token
+   - Signatures pushed to GHCR
+   - Transparency log entries created
+
+7. **Re-push Tags** - Update tag references for proper GHCR UI display
+
+8. **Create Release** - Creates GitHub Release
+   - Name: `k8ssandra-signed-<container_version>` (e.g., `k8ssandra-signed-1.0.4`)
+   - Includes signature verification instructions
    - Lists all published image tags
 
 ### 5. Verify Release
@@ -181,17 +197,17 @@ Check that images were published:
 
 ```bash
 # Check GHCR for published images
-gh api /orgs/axonops/packages/container/axonops-cassandra-containers/versions | \
+gh api /orgs/axonops/packages/container/k8ssandra%2Fcassandra/versions | \
   jq '.[] | select(.metadata.container.tags[] | contains("1.0.0"))'
 
 # Pull and test an image
-docker pull ghcr.io/axonops/axonops-cassandra-containers:5.0.6-1.0.0
+docker pull ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5
 docker run -d \
   -e AXON_AGENT_KEY=your-key \
   -e AXON_AGENT_ORG=your-org \
   -e AXON_AGENT_HOST=agents.axonops.cloud \
   -p 9042:9042 \
-  ghcr.io/axonops/axonops-cassandra-containers:5.0.6-1.0.0
+  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5
 ```
 
 Check GitHub Release:
@@ -201,8 +217,25 @@ Check GitHub Release:
 gh release list
 
 # View specific release
-gh release view k8ssandra-1.0.0
+gh release view k8ssandra-signed-1.0.0
 ```
+
+**Verify Signatures:**
+
+All production images are signed. Verify before deployment:
+
+```bash
+# Verify signature
+cosign verify \
+  --certificate-identity-regexp='https://github.com/axonops/axonops-containers' \
+  --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
+  ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5
+
+# Check signature exists
+cosign tree ghcr.io/axonops/k8ssandra/cassandra:5.0.6-v0.1.110-1.0.5
+```
+
+See [Security Documentation](../README.md#security) for more on signature verification and digest-based deployment.
 
 ## Inputs Reference
 
@@ -238,9 +271,9 @@ This becomes the container version for all published images:
 Each release publishes:
 
 ### Container Images (GHCR)
-- `ghcr.io/axonops/axonops-cassandra-containers:5.0.6-<container_version>`
-- `ghcr.io/axonops/axonops-cassandra-containers:5.0.5-<container_version>`
-- `ghcr.io/axonops/axonops-cassandra-containers:5.0.4-<container_version>`
+- `ghcr.io/axonops/k8ssandra/cassandra:5.0.6-<container_version>`
+- `ghcr.io/axonops/k8ssandra/cassandra:5.0.5-<container_version>`
+- `ghcr.io/axonops/k8ssandra/cassandra:5.0.4-<container_version>`
 
 All images are multi-arch: `linux/amd64`, `linux/arm64`
 

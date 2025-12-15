@@ -1,0 +1,53 @@
+name: 'K8ssandra Verify No Startup Errors'
+description: 'Verify container starts without errors in logs'
+
+inputs:
+  container_name:
+    description: 'Name of the container to check'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check for startup errors
+      shell: bash
+      run: |
+        echo "Checking ${{ inputs.container_name }} logs for startup errors..."
+
+        # Get container logs
+        LOGS=$(docker logs ${{ inputs.container_name }} 2>&1)
+
+        # Check for common error patterns
+        ERROR_PATTERNS=(
+          "No such file or directory"
+          "Permission denied"
+          "cannot open"
+          "Failed to"
+          "ERROR:"
+          "FATAL:"
+          "Exception in thread"
+        )
+
+        ERRORS_FOUND=0
+
+        for pattern in "${ERROR_PATTERNS[@]}"; do
+          if echo "$LOGS" | grep -i "$pattern" > /dev/null 2>&1; then
+            echo "❌ Found error pattern: $pattern"
+            echo "Context:"
+            echo "$LOGS" | grep -i -C 2 "$pattern"
+            echo ""
+            ERRORS_FOUND=1
+          fi
+        done
+
+        if [ $ERRORS_FOUND -eq 1 ]; then
+          echo ""
+          echo "=== Full Container Logs ==="
+          echo "$LOGS"
+          echo "==========================="
+          echo ""
+          echo "❌ Startup errors detected in container logs"
+          exit 1
+        else
+          echo "✓ No startup errors found in container logs"
+        fi

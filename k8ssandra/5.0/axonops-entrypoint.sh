@@ -13,15 +13,38 @@ print_startup_banner() {
       source /etc/axonops/build-info.txt 2>/dev/null || true
     fi
 
-    # Title with all key versions
-    echo "AxonOps K8ssandra Apache Cassandra ${CASSANDRA_VERSION:-unknown} + ${AXON_AGENT_VERSION:-unknown}"
-    echo "Container v${CONTAINER_VERSION:-unknown} (git: ${CONTAINER_REVISION:-unknown})"
+    # Title
+    echo "AxonOps K8ssandra Apache Cassandra ${CASSANDRA_VERSION:-unknown}"
+    if [ -n "${CONTAINER_IMAGE}" ] && [ "${CONTAINER_IMAGE}" != "unknown" ] && [ "${CONTAINER_IMAGE}" != "" ]; then
+      echo "Image: ${CONTAINER_IMAGE}"
+    fi
+    if [ -n "${CONTAINER_BUILD_DATE}" ] && [ "${CONTAINER_BUILD_DATE}" != "unknown" ] && [ "${CONTAINER_BUILD_DATE}" != "" ]; then
+      echo "Built: ${CONTAINER_BUILD_DATE}"
+    fi
+
+    # Show release/tag link if available (CI builds)
+    if [ -n "${CONTAINER_GIT_TAG}" ] && [ "${CONTAINER_GIT_TAG}" != "unknown" ] && [ "${CONTAINER_GIT_TAG}" != "" ]; then
+      if [ "${IS_PRODUCTION_RELEASE:-false}" = "true" ]; then
+        # Production build - link to release page (has release notes)
+        echo "Release: https://github.com/axonops/axonops-containers/releases/tag/${CONTAINER_GIT_TAG}"
+      else
+        # Development build - link to tag/tree
+        echo "Tag:     https://github.com/axonops/axonops-containers/tree/${CONTAINER_GIT_TAG}"
+      fi
+    fi
+
+    # Show who built it if available (CI builds)
+    if [ -n "${CONTAINER_BUILT_BY}" ] && [ "${CONTAINER_BUILT_BY}" != "unknown" ] && [ "${CONTAINER_BUILT_BY}" != "" ]; then
+      echo "Built by: ${CONTAINER_BUILT_BY}"
+    fi
+
     echo "================================================================================"
     echo ""
 
     # Component versions (from build-info.txt)
     echo "Component Versions:"
     echo "  Cassandra:          ${CASSANDRA_VERSION:-unknown}"
+    echo "  k8ssandra API:      ${K8SSANDRA_API_VERSION:-unknown}"
     echo "  Java:               ${JAVA_VERSION:-unknown}"
     echo "  AxonOps Agent:      ${AXON_AGENT_VERSION:-unknown}"
     echo "  AxonOps Java Agent: ${AXON_JAVA_AGENT_VERSION:-unknown}"
@@ -29,6 +52,12 @@ print_startup_banner() {
     echo "  jemalloc:           ${JEMALLOC_VERSION:-unknown}"
     echo "  OS:                 ${OS_VERSION:-unknown}"
     echo "  Platform:           ${PLATFORM:-unknown}"
+    echo ""
+
+    # Supply chain verification (digests for security audit)
+    echo "Supply Chain Security:"
+    echo "  Base image:         k8ssandra/cass-management-api:${CASSANDRA_VERSION:-unknown}-ubi-v${K8SSANDRA_API_VERSION:-unknown}"
+    echo "  Base image digest:  ${K8SSANDRA_BASE_DIGEST:-unknown}"
     echo ""
 
     # Runtime environment (dynamic - only knowable at runtime)
@@ -82,7 +111,18 @@ fi
 
 # Add AxonOps JVM options to cassandra-env.sh
 echo ". /usr/share/axonops/axonops-jvm.options" >> /opt/cassandra/conf/cassandra-env.sh
-echo ". /usr/share/axonops/axonops-jvm.options" >> /config/cassandra-env.sh
+# Also add to /config if it exists (K8ssandra operator mounts config here)
+if [ -f /config/cassandra-env.sh ]; then
+    echo ". /usr/share/axonops/axonops-jvm.options" >> /config/cassandra-env.sh
+fi
+
+# Enable jemalloc for memory optimization (UBI path)
+if [ -f /usr/lib64/libjemalloc.so.2 ]; then
+    export LD_PRELOAD=/usr/lib64/libjemalloc.so.2
+    echo "✓ jemalloc enabled"
+else
+    echo "⚠ jemalloc not found, continuing without it"
+fi
 
 # Print startup banner (after config ready, before starting Cassandra)
 print_startup_banner
