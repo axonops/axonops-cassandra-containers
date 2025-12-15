@@ -124,7 +124,7 @@ jobs:
           output: 'trivy-results.sarif'
           ignore-unfixed: true
           scanners: 'vuln'
-          trivyignores: 'axonops/axondb-search/opensearch/3.3.2/.trivyignore.yaml'
+          trivyignores: 'axonops/axondb-search/opensearch/3.3.2/.trivyignore'
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
