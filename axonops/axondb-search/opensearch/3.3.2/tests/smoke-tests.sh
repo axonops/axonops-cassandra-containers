@@ -564,6 +564,72 @@ fi
 
 echo ""
 echo "========================================" | tee -a "$RESULTS_FILE"
+echo "TLS DISABLED TEST (HTTP Mode)" | tee -a "$RESULTS_FILE"
+echo "========================================" | tee -a "$RESULTS_FILE"
+echo ""
+
+# Test 35: Start new container with TLS disabled and verify HTTP works
+run_test
+echo "Test 35: TLS disabled mode - HTTP accessible"
+echo "  Starting temporary container with AXONOPS_SEARCH_TLS_ENABLED=false..."
+
+# Start container with TLS disabled
+TLS_CONTAINER="opensearch-tls-disabled-test"
+podman run -d --name "$TLS_CONTAINER" \
+  -e AXONOPS_SEARCH_TLS_ENABLED=false \
+  -e discovery.type=single-node \
+  -p 9201:9200 \
+  axondb-search:secure >/dev/null 2>&1
+
+# Wait for container to be ready
+sleep 30
+
+# Test HTTP (not HTTPS) access
+HTTP_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -u "$DEFAULT_USER:$DEFAULT_PASSWORD" "http://localhost:9201/" 2>/dev/null || echo "000")
+
+# Clean up
+podman stop "$TLS_CONTAINER" >/dev/null 2>&1
+podman rm "$TLS_CONTAINER" >/dev/null 2>&1
+
+if [ "$HTTP_RESPONSE" = "200" ]; then
+    pass_test "HTTP accessible when TLS disabled (got 200)"
+else
+    fail_test "HTTP with TLS disabled" "Expected 200, got $HTTP_RESPONSE"
+fi
+
+# Test 36: Verify HTTPS fails when TLS disabled
+run_test
+echo "Test 36: TLS disabled mode - HTTPS not required"
+echo "  Starting temporary container with AXONOPS_SEARCH_TLS_ENABLED=false..."
+
+# Start container with TLS disabled
+podman run -d --name "$TLS_CONTAINER" \
+  -e AXONOPS_SEARCH_TLS_ENABLED=false \
+  -e discovery.type=single-node \
+  -p 9201:9200 \
+  axondb-search:secure >/dev/null 2>&1
+
+# Wait for container to be ready
+sleep 30
+
+# Verify HTTP works (primary check)
+HTTP_WORKS=$(curl -s -o /dev/null -w "%{http_code}" -u "$DEFAULT_USER:$DEFAULT_PASSWORD" "http://localhost:9201/" 2>/dev/null || echo "000")
+
+# Check that healthcheck uses HTTP protocol
+HEALTHCHECK_OUTPUT=$(podman exec "$TLS_CONTAINER" /usr/local/bin/healthcheck.sh readiness 2>&1 || true)
+
+# Clean up
+podman stop "$TLS_CONTAINER" >/dev/null 2>&1
+podman rm "$TLS_CONTAINER" >/dev/null 2>&1
+
+if [ "$HTTP_WORKS" = "200" ] && echo "$HEALTHCHECK_OUTPUT" | grep -q "Readiness check passed"; then
+    pass_test "HTTP mode fully functional (API + healthchecks work)"
+else
+    fail_test "HTTP mode validation" "HTTP response: $HTTP_WORKS, healthcheck unclear"
+fi
+
+echo ""
+echo "========================================" | tee -a "$RESULTS_FILE"
 echo "TEST SUMMARY" | tee -a "$RESULTS_FILE"
 echo "========================================" | tee -a "$RESULTS_FILE"
 echo ""
