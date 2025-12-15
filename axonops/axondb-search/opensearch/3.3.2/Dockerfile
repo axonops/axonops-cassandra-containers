@@ -137,6 +137,19 @@ RUN cd ${OPENSEARCH_HOME} && \
     bash ${OPENSEARCH_HOME}/plugins/opensearch-security/tools/install_demo_configuration.sh -y -i -s && \
     chown -R opensearch:root /etc/opensearch
 
+# Overlay our baseline security configuration files
+# These are the demo configs extracted for future customization
+# The init script will append custom users to internal_users.yml at runtime if AXONOPS_SEARCH_USER is provided
+COPY --chown=opensearch:root config/security/action_groups.yml /etc/opensearch/opensearch-security/action_groups.yml
+COPY --chown=opensearch:root config/security/allowlist.yml /etc/opensearch/opensearch-security/allowlist.yml
+COPY --chown=opensearch:root config/security/audit.yml /etc/opensearch/opensearch-security/audit.yml
+COPY --chown=opensearch:root config/security/config.yml /etc/opensearch/opensearch-security/config.yml
+COPY --chown=opensearch:root config/security/internal_users.yml /etc/opensearch/opensearch-security/internal_users.yml
+COPY --chown=opensearch:root config/security/nodes_dn.yml /etc/opensearch/opensearch-security/nodes_dn.yml
+COPY --chown=opensearch:root config/security/roles.yml /etc/opensearch/opensearch-security/roles.yml
+COPY --chown=opensearch:root config/security/roles_mapping.yml /etc/opensearch/opensearch-security/roles_mapping.yml
+COPY --chown=opensearch:root config/security/tenants.yml /etc/opensearch/opensearch-security/tenants.yml
+
 # Create data and log directories
 RUN mkdir -p ${OPENSEARCH_DATA_DIR} ${OPENSEARCH_LOG_DIR} && \
     chown -R opensearch:root ${OPENSEARCH_DATA_DIR} ${OPENSEARCH_LOG_DIR} && \
