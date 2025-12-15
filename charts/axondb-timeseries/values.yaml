@@ -7,7 +7,7 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: ghcr.io/axonops/development/k8ssandra/cassandra
+  repository: ghcr.io/axonops/development/axondb-timeseries
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
@@ -38,16 +38,16 @@ podAnnotations: {}
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels: {}
 
-podSecurityContext: {}
-  # fsGroup: 2000
+podSecurityContext:
+  fsGroup: 999
 
-securityContext: {}
+securityContext:
   # capabilities:
   #   drop:
   #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 999
 
 # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
@@ -56,9 +56,58 @@ service:
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
   port: 9042
 
-jvmOpts: ""
-maxHeapSize: 1024M
-minHeapSize: 1024M
+# JVM Heap Size Configuration
+# =============================
+# This setting configures the maximum heap size for the Cassandra JVM.
+# Adjust this value based on your workload and available resources.
+# For a production environment, consider setting this to a higher value, such as 8G or more.
+heapSize: 1024M
+
+# Authentication Configuration for AxonOps Timeseries Database
+# =============================================================
+# By default, the timeseries database will not have dedicated authentication users for AxonOps.
+# It is strongly recommended to configure authentication credentials in production environments.
+#
+# You have two options for providing authentication credentials:
+#
+# Option 1: Using a Kubernetes Secret (Recommended for Production)
+# -----------------------------------------------------------------
+# Provide the name of an existing Kubernetes secret containing the credentials.
+# The secret MUST contain these exact keys:
+#   - AXONOPS_DB_USER: The database username for AxonOps
+#   - AXONOPS_DB_PASSWORD: The database password for AxonOps
+#
+# Example secret creation:
+#   kubectl create secret generic axonops-db-credentials \
+#     --from-literal=AXONOPS_DB_USER=axonops \
+#     --from-literal=AXONOPS_DB_PASSWORD=secure-password
+#
+# Then configure:
+#   authentication:
+#     db_secret: "axonops-db-credentials"
+#
+# Option 2: Using Direct Values (For Development/Testing Only)
+# ------------------------------------------------------------
+# Provide the username and password directly in the values file.
+# Note: This method stores credentials in plain text and should NOT be used in production.
+#
+# Example configuration:
+#   authentication:
+#     db_user: "axonops"
+#     db_password: "axonops_password"
+#
+# When Configured:
+# ---------------
+# The credentials will be passed to the container as environment variables:
+# - AXONOPS_DB_USER: The username for database authentication
+# - AXONOPS_DB_PASSWORD: The password for database authentication
+#
+# These environment variables can be used by the application to authenticate with the database.
+
+authentication:
+  db_user: ""
+  db_password: ""
+  db_secret: ""
 
 resources: {}
   # limits:

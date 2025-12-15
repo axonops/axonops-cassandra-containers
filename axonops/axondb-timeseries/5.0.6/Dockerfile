@@ -171,7 +171,8 @@ COPY --chown=cassandra:root config/logback.xml /etc/cassandra/logback.xml
 RUN mkdir -p ${CASSANDRA_DATA_DIR} ${CASSANDRA_LOG_DIR} && \
     chown -R cassandra:root ${CASSANDRA_DATA_DIR} ${CASSANDRA_LOG_DIR} && \
     chmod 775 ${CASSANDRA_DATA_DIR} ${CASSANDRA_LOG_DIR} && \
-    chmod a+rwX ${CASSANDRA_PATH} /etc/cassandra
+    chmod a+rwX ${CASSANDRA_PATH} /etc/cassandra && \
+    chown -R cassandra:cassandra $CASSANDRA_LOG_DIR $CASSANDRA_DATA_DIR
 
 # Copy our healthcheck script
 COPY scripts/healthcheck.sh /usr/local/bin/healthcheck.sh
@@ -197,8 +198,7 @@ RUN mkdir -p /etc/axonops && \
     echo "CQLAI_VERSION=\"$(cqlai --version 2>&1 | awk '{print $NF}' || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
     echo "JEMALLOC_VERSION=\"$(rpm -q jemalloc 2>/dev/null || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
     echo "OS_VERSION=\"$(grep PRETTY_NAME /etc/os-release 2>/dev/null | sed 's/.*="\(.*\)"/\1/' || echo 'unknown') (UBI - Universal Base Image, freely redistributable)\"" >> /etc/axonops/build-info.txt && \
-    echo "PLATFORM=\"$(uname -m || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
-    chown -R cassandra:root /etc/axonops
+    echo "PLATFORM=\"$(uname -m || echo 'unknown')\"" >> /etc/axonops/build-info.txt
 
 # AxonDB entrypoint
 COPY scripts/entrypoint.sh /usr/local/bin/docker-entrypoint.sh
@@ -229,7 +229,7 @@ RUN TINI_VERSION=v0.19.0 && \
 USER cassandra
 
 # Expose volumes
-VOLUME ["/var/lib/cassandra", "/var/log/cassandra"]
+#VOLUME ["/var/lib/cassandra", "/var/log/cassandra"]
 
 # CASSANDRA PORTS (INTRA-NODE, TLS INTRA-NODE, JMX, CQL, THRIFT)
 EXPOSE 7000 7001 7199 9042 9160

@@ -53,10 +53,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-            - name: MAX_HEAP_SIZE
-              value: "{{ .Values.maxHeapSize }}"
-            - name: HEAP_NEWSIZE
-              value: "{{ .Values.minHeapSize }}"
+            - name: CASSANDRA_HEAP_SIZE
+              value: "{{ .Values.heapSize }}"
           {{- if .Values.tls.enabled }}
             # TLS/SSL Environment Variables
             {{- if .Values.tls.certManager.enabled }}
@@ -98,6 +96,25 @@ spec:
             - name: CASSANDRA_CLIENT_PROTOCOL
               value: "{{ .Values.tls.cassandra.clientToNode.protocol }}"
             {{- end }}
+          {{- end }}
+          {{- if .Values.authentication.db_secret }}
+            # Authentication credentials from secret
+            - name: AXONOPS_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authentication.db_secret }}
+                  key: AXONOPS_DB_USER
+            - name: AXONOPS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authentication.db_secret }}
+                  key: AXONOPS_DB_PASSWORD
+          {{- else if and .Values.authentication.db_user .Values.authentication.db_password }}
+            # Authentication credentials from values
+            - name: AXONOPS_DB_USER
+              value: {{ .Values.authentication.db_user | quote }}
+            - name: AXONOPS_DB_PASSWORD
+              value: {{ .Values.authentication.db_password | quote }}
           {{- end }}
           {{- if .Values.envVars }}
             {{- toYaml .Values.envVars | nindent 12 }}
