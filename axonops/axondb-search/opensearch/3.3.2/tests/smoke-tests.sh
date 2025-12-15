@@ -449,32 +449,6 @@ fi
 
 echo ""
 echo "========================================" | tee -a "$RESULTS_FILE"
-echo "PROCESS FAILURE DETECTION TESTS" | tee -a "$RESULTS_FILE"
-echo "========================================" | tee -a "$RESULTS_FILE"
-echo ""
-
-# Test 27: Kill OpenSearch process and verify liveness healthcheck fails
-run_test
-echo "Test 27: Healthcheck detects killed process"
-# Get OpenSearch PID
-OPENSEARCH_PID=$(podman exec "$CONTAINER_NAME" pgrep -f "org.opensearch.bootstrap.OpenSearch" 2>/dev/null | head -1)
-if [ -n "$OPENSEARCH_PID" ]; then
-    # Kill the process
-    podman exec "$CONTAINER_NAME" kill -9 "$OPENSEARCH_PID" 2>/dev/null || true
-    sleep 2
-
-    # Liveness check should fail now
-    if ! podman exec "$CONTAINER_NAME" /usr/local/bin/healthcheck.sh liveness >/dev/null 2>&1; then
-        pass_test "Liveness healthcheck correctly detected process failure (exit code 1)"
-    else
-        fail_test "Process failure detection" "Liveness check passed when it should have failed"
-    fi
-else
-    fail_test "Process failure detection" "Could not find OpenSearch PID"
-fi
-
-echo ""
-echo "========================================" | tee -a "$RESULTS_FILE"
 echo "ENVIRONMENT VARIABLE TESTS" | tee -a "$RESULTS_FILE"
 echo "========================================" | tee -a "$RESULTS_FILE"
 echo ""
@@ -626,6 +600,34 @@ if [ "$HTTP_WORKS" = "200" ] && echo "$HEALTHCHECK_OUTPUT" | grep -q "Readiness 
     pass_test "HTTP mode fully functional (API + healthchecks work)"
 else
     fail_test "HTTP mode validation" "HTTP response: $HTTP_WORKS, healthcheck unclear"
+fi
+
+echo ""
+echo "========================================" | tee -a "$RESULTS_FILE"
+echo "PROCESS FAILURE DETECTION TEST (DESTRUCTIVE - RUNS LAST)" | tee -a "$RESULTS_FILE"
+echo "========================================" | tee -a "$RESULTS_FILE"
+echo ""
+
+# Test 37: Kill OpenSearch process and verify liveness healthcheck fails
+# NOTE: This test is DESTRUCTIVE and runs last because it kills the container
+run_test
+echo "Test 37: Healthcheck detects killed process"
+# Get OpenSearch PID
+OPENSEARCH_PID=$(podman exec "$CONTAINER_NAME" pgrep -f "org.opensearch.bootstrap.OpenSearch" 2>/dev/null | head -1)
+if [ -n "$OPENSEARCH_PID" ]; then
+    # Kill the process
+    echo "  Killing OpenSearch process (PID: $OPENSEARCH_PID)..."
+    podman exec "$CONTAINER_NAME" kill -9 "$OPENSEARCH_PID" 2>/dev/null || true
+    sleep 2
+
+    # Liveness check should fail now
+    if ! podman exec "$CONTAINER_NAME" /usr/local/bin/healthcheck.sh liveness >/dev/null 2>&1; then
+        pass_test "Liveness healthcheck correctly detected process failure (exit code 1)"
+    else
+        fail_test "Process failure detection" "Liveness check passed when it should have failed"
+    fi
+else
+    fail_test "Process failure detection" "Could not find OpenSearch PID"
 fi
 
 echo ""
