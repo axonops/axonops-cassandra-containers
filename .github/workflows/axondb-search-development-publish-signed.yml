@@ -67,33 +67,43 @@ jobs:
           container_name: axondb-test
           image: axondb-search:test
 
-      - name: Verify no startup errors
+      - name: Verify startup banner
+        uses: ./.github/actions/axondb-search-verify-startup-banner
+        with:
+          container_name: axondb-test
+          expected_opensearch_version: ${{ steps.version.outputs.opensearch_version }}
 
-      - name: Verify versions (jemalloc, OpenSearch, Java, opensearch)
+      - name: Verify OpenSearch version
         uses: ./.github/actions/axondb-search-verify-versions
         with:
-          opensearch_version: ${{ steps.version.outputs.opensearch_version }}
           container_name: axondb-test
+          expected_version: ${{ steps.version.outputs.opensearch_version }}
+          admin_user: admin
+          admin_password: MyS3cur3P@ss2025
 
-      - name: Test healthcheck script
+      - name: Test healthcheck probes
         uses: ./.github/actions/axondb-search-test-healthcheck
         with:
           container_name: axondb-test
 
-      - name: Verify init scripts
-        uses: ./.github/actions/axondb-search-verify-init-scripts
+      - name: Verify AxonOps certificates
+        uses: ./.github/actions/axondb-search-verify-certificates
         with:
           container_name: axondb-test
 
-      - name: Test opensearch
-        uses: ./.github/actions/axondb-search-test-opensearch
+      - name: Test authentication
+        uses: ./.github/actions/axondb-search-test-authentication
         with:
           container_name: axondb-test
+          admin_user: admin
+          admin_password: MyS3cur3P@ss2025
 
-      - name: Test cqlsh
-        uses: ./.github/actions/axondb-search-test-cqlsh
+      - name: Test REST API operations
+        uses: ./.github/actions/axondb-search-test-rest-api
         with:
           container_name: axondb-test
+          admin_user: admin
+          admin_password: MyS3cur3P@ss2025
 
       - name: Run Trivy container security scan
         uses: aquasecurity/trivy-action@0.33.0
