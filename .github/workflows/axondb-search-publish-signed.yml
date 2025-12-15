@@ -104,6 +104,7 @@ jobs:
         uses: ./.github/actions/axondb-search-start-and-wait
         with:
           container_name: axondb-test
+          image: axondb-search:test
 
       - name: Verify startup banner
         uses: ./.github/actions/axondb-search-verify-startup-banner
