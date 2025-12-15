@@ -541,6 +541,27 @@ else
     fail_test "Custom user existence" "User $CUSTOM_USER not found"
 fi
 
+# Test 33: TLS enabled by default (AXONOPS_SEARCH_TLS_ENABLED)
+run_test
+echo "Test 33: TLS enabled by default (HTTPS)"
+# Check if HTTPS works (TLS should be enabled by default)
+HTTPS_RESPONSE=$(curl -s --insecure -o /dev/null -w "%{http_code}" -u "$DEFAULT_USER:$DEFAULT_PASSWORD" "https://localhost:9200/" 2>/dev/null || echo "000")
+if [ "$HTTPS_RESPONSE" = "200" ]; then
+    pass_test "HTTPS accessible (TLS enabled by default)"
+else
+    fail_test "HTTPS access" "Expected 200, got $HTTPS_RESPONSE"
+fi
+
+# Test 34: Verify container environment has TLS setting
+run_test
+echo "Test 34: AXONOPS_SEARCH_TLS_ENABLED environment variable"
+TLS_ENV=$(podman exec "$CONTAINER_NAME" printenv AXONOPS_SEARCH_TLS_ENABLED 2>/dev/null || echo "")
+if [ -z "$TLS_ENV" ] || [ "$TLS_ENV" = "true" ]; then
+    pass_test "AXONOPS_SEARCH_TLS_ENABLED defaults to true or is set correctly"
+else
+    fail_test "TLS environment variable" "Expected true or unset, got $TLS_ENV"
+fi
+
 echo ""
 echo "========================================" | tee -a "$RESULTS_FILE"
 echo "TEST SUMMARY" | tee -a "$RESULTS_FILE"
