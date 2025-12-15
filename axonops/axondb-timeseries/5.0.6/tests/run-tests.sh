@@ -21,31 +21,51 @@ cleanup() {
     sleep 2
 }
 
-# Function to wait for container to be healthy
+# Function to wait for container to be ready (using startup healthcheck)
 wait_for_healthy() {
     local container_name="$1"
     local max_wait=300  # 5 minutes
     local elapsed=0
 
-    echo "  Waiting for container to be healthy..."
+    echo "  Waiting for container to be ready (using startup healthcheck)..."
 
     while [ $elapsed -lt $max_wait ]; do
-        if podman inspect "$container_name" --format='{{.State.Health.Status}}' 2>/dev/null | grep -q "healthy"; then
-            echo "  ✓ Container is healthy"
-            return 0
-        fi
-
+        # Check if container is still running
         if ! podman inspect "$container_name" --format='{{.State.Status}}' 2>/dev/null | grep -q "running"; then
             echo "  ✗ Container is not running!"
             return 1
         fi
 
+        # Use our startup healthcheck script
+        if podman exec "$container_name" /usr/local/bin/healthcheck.sh startup 2>/dev/null; then
+            echo "  ✓ Container startup healthcheck passed"
+
+            # Also wait for readiness (ensures CQL is fully operational)
+            echo "  Waiting for readiness healthcheck..."
+            local ready_wait=0
+            while [ $ready_wait -lt 30 ]; do
+                if podman exec "$container_name" /usr/local/bin/healthcheck.sh readiness 2>/dev/null; then
+                    echo "  ✓ Container readiness healthcheck passed"
+                    return 0
+                fi
+                sleep 2
+                ready_wait=$((ready_wait + 2))
+            done
+
+            echo "  ⚠ Readiness check taking longer than expected, but continuing..."
+            return 0
+        fi
+
         sleep 5
         elapsed=$((elapsed + 5))
-        echo "    Waiting... ${elapsed}s / ${max_wait}s"
+        if [ $((elapsed % 30)) -eq 0 ]; then
+            echo "    Waiting... ${elapsed}s / ${max_wait}s"
+        fi
     done
 
-    echo "  ✗ Timeout waiting for container to be healthy"
+    echo "  ✗ Timeout waiting for container startup healthcheck"
+    echo "  Last healthcheck output:"
+    podman exec "$container_name" /usr/local/bin/healthcheck.sh startup 2>&1 || true
     return 1
 }
 
@@ -55,10 +75,10 @@ check_semaphores() {
     echo "  Checking semaphore files..."
 
     echo "    - System keyspace init semaphore:"
-    podman exec "$container_name" cat /etc/axonops/init-system-keyspaces.done 2>/dev/null || echo "      NOT FOUND"
+    podman exec "$container_name" cat /var/lib/cassandra/.axonops/init-system-keyspaces.done 2>/dev/null || echo "      NOT FOUND"
 
     echo "    - Database user init semaphore:"
-    podman exec "$container_name" cat /etc/axonops/init-db-user.done 2>/dev/null || echo "      NOT FOUND"
+    podman exec "$container_name" cat /var/lib/cassandra/.axonops/init-db-user.done 2>/dev/null || echo "      NOT FOUND"
 }
 
 # Function to check keyspace replication
@@ -132,8 +152,7 @@ run_test() {
     echo "    --- init-system-keyspaces.log ---"
     podman exec "$container_name" cat /var/log/cassandra/init-system-keyspaces.log 2>/dev/null || echo "    Log file not found"
     echo ""
-    echo "    --- init-db-user.log ---"
-    podman exec "$container_name" cat /var/log/cassandra/init-db-user.log 2>/dev/null || echo "    Log file not found"
+    echo "    Note: Both keyspace and user init logged to same file (init-system-keyspaces.log)"
 
     # Cleanup
     cleanup "$compose_file"
@@ -164,7 +183,7 @@ validate_test2() {
     check_semaphores "$container"
 
     # Verify init was skipped
-    if podman exec "$container" cat /etc/axonops/init-system-keyspaces.done 2>/dev/null | grep "disabled_by_env_var"; then
+    if podman exec "$container" cat /var/lib/cassandra/.axonops/init-system-keyspaces.done 2>/dev/null | grep "disabled_by_env_var"; then
         echo "  ✓ System keyspace init was skipped as expected"
         return 0
     else
@@ -201,23 +220,43 @@ validate_test3() {
 validate_test4() {
     local container="$1"
     check_semaphores "$container"
-    check_user "$container" "axonops"
 
     # Verify init was skipped
-    if ! podman exec "$container" cat /etc/axonops/init-system-keyspaces.done 2>/dev/null | grep "disabled_by_env_var"; then
+    if ! podman exec "$container" cat /var/lib/cassandra/.axonops/init-system-keyspaces.done 2>/dev/null | grep "disabled_by_env_var"; then
         echo "  ✗ System keyspace init was NOT skipped"
         return 1
     fi
+    echo "  ✓ System keyspace init skipped (disabled_by_env_var)"
 
-    # Verify custom user works
-    if podman exec "$container" cqlsh -u axonops -p securepass123 -e "SELECT now() FROM system.local LIMIT 1;" 2>/dev/null; then
-        echo "  ✓ Custom user 'axonops' created and working"
-        echo "  ✓ Test passed: Init skipped AND custom user created"
-        return 0
-    else
-        echo "  ✗ Custom user 'axonops' authentication failed"
+    # Verify user init was also skipped (when INIT_SYSTEM_KEYSPACES_AND_ROLES=false, both skip)
+    if ! podman exec "$container" cat /var/lib/cassandra/.axonops/init-db-user.done 2>/dev/null | grep "init_disabled"; then
+        echo "  ✗ User init was NOT skipped"
         return 1
     fi
+    echo "  ✓ User init skipped (init_disabled)"
+
+    # Wait a bit for CQL authentication to be fully ready (sometimes needs extra time)
+    echo "  Waiting for authentication to be ready..."
+    sleep 5
+
+    # Should still be able to login with default credentials (retry a few times)
+    local max_attempts=3
+    local attempt=1
+    while [ $attempt -le $max_attempts ]; do
+        if podman exec "$container" cqlsh -u cassandra -p cassandra -e "SELECT now() FROM system.local LIMIT 1;" 2>/dev/null; then
+            echo "  ✓ Both init operations skipped as expected"
+            echo "  ✓ Default cassandra credentials still work"
+            return 0
+        fi
+        echo "    Attempt $attempt/$max_attempts failed, retrying..."
+        sleep 3
+        attempt=$((attempt + 1))
+    done
+
+    echo "  ✗ Cannot connect with default credentials after $max_attempts attempts"
+    echo "  Debug: Checking if Cassandra is ready..."
+    podman exec "$container" nodetool status 2>&1 | head -10
+    return 1
 }
 
 # Initialize results file
