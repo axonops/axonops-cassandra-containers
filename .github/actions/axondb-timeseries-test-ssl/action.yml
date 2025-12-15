@@ -121,8 +121,6 @@ runs:
         echo "Creating keyspace..."
         docker exec ${{ inputs.container_name }} cqlsh --ssl -u cassandra -p cassandra -e "CREATE KEYSPACE IF NOT EXISTS cqlsh_ssl_test WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
 
-        docker stop axondb-ssl-internode && docker rm axondb-ssl-internode
-
         echo "========================================="
         echo "✓ ALL SSL TESTS PASSED"
         echo "========================================="
@@ -132,5 +130,5 @@ runs:
       if: always()
       run: |
         echo "=== Cleaning up test certificates ==="
-        rm -rf tests/certs
+        sudo rm -rf tests/certs
         echo "✓ Test certificates removed"
