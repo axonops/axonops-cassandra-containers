@@ -219,3 +219,8 @@ jobs:
         uses: ./.github/actions/axondb-timeseries-test-dc-detection
         with:
           image: axondb-timeseries:test
+
+      - name: Test SSL configuration
+        uses: ./.github/actions/axondb-timeseries-test-ssl
+        with:
+          image: axondb-timeseries:test
