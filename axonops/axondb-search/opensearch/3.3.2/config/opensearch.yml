@@ -38,13 +38,15 @@ path.logs: /var/log/opensearch
 #
 # ----------------------------------- Memory -----------------------------------
 #
-# Lock the memory on startup:
+# Lock the memory on startup to prevent JVM heap swapping (recommended for production):
 #
-# bootstrap.memory_lock: true
+bootstrap.memory_lock: true
 #
 # Make sure that the heap size is set to about half the memory available
 # on the system and that the owner of the process is allowed to use this
 # limit.
+#
+# IMPORTANT: Requires ulimits.memlock=-1 in Kubernetes pod securityContext
 #
 # OpenSearch performs poorly when the system is swapping the memory.
 #
@@ -94,6 +96,16 @@ discovery.type: single-node
 # Require explicit names when deleting indices:
 #
 # action.destructive_requires_name: true
+#
+# ---------------------------------- Thread Pools ------------------------------
+#
+# Increase bulk/write queue size for high-throughput workloads:
+#
+thread_pool.write.queue_size: 1000
+#
+# Default is 10000 in OpenSearch 3.x (was 200 in older versions)
+# Increase if you see bulk rejections in high-write scenarios
+# Note: Increasing queue size requires more memory
 #
 # ---------------------------------- Security ----------------------------------
 #
