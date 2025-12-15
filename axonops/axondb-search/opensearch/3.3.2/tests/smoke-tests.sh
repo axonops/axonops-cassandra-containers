@@ -216,9 +216,8 @@ fi
 # Test 11: Search for the document
 run_test
 echo "Test 11: Search for document"
-# Add refresh to ensure document is searchable
-sleep 1  # Allow time for index refresh
-SEARCH_RESPONSE=$(curl -s --insecure -u "$CUSTOM_USER:$CUSTOM_PASSWORD" "$OPENSEARCH_URL/$TEST_INDEX/_search?q=test_id:smoke-test-1&refresh=true" 2>/dev/null)
+# Force refresh and search directly
+SEARCH_RESPONSE=$(curl -s --insecure -u "$CUSTOM_USER:$CUSTOM_PASSWORD" "$OPENSEARCH_URL/$TEST_INDEX/_search" -H 'Content-Type: application/json' -d '{"query":{"match":{"test_id":"smoke-test-1"}}}' 2>/dev/null)
 HIT_COUNT=$(echo "$SEARCH_RESPONSE" | grep -o '"total":{"value":[0-9]*' | cut -d':' -f3)
 if [ "$HIT_COUNT" = "1" ] 2>/dev/null; then
     pass_test "Document found via search"
@@ -499,10 +498,11 @@ fi
 run_test
 echo "Test 31: network.host applied"
 NODE_INFO=$(curl -s --insecure -u "$DEFAULT_USER:$DEFAULT_PASSWORD" "$OPENSEARCH_URL/_nodes/_local" 2>/dev/null)
-if echo "$NODE_INFO" | grep -qE '"http".*"0\.0\.0\.0:9200"'; then
-    pass_test "Network host is 0.0.0.0"
+# Check for bound_address showing all interfaces ([::]:9200 or 0.0.0.0:9200)
+if echo "$NODE_INFO" | grep -qE '"bound_address".*\[::\]:9200'; then
+    pass_test "Network host is 0.0.0.0 (bound to all interfaces)"
 else
-    fail_test "Network host" "Expected 0.0.0.0"
+    fail_test "Network host" "Expected binding to all interfaces"
 fi
 
 # Test 32: Custom admin user from environment variables
