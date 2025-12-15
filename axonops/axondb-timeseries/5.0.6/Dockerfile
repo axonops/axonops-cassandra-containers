@@ -137,6 +137,19 @@ RUN mkdir -p "$CASSANDRA_HOME" /licenses && \
     chown -R cassandra:root "$CASSANDRA_HOME" /etc/cassandra /licenses && \
     rm -rf /tmp/*
 
+# Get yq, this will be used to modify the cassandra.yaml if needed
+RUN YQ_VERSION=v4.50.1 && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        YQ_ARCH="amd64"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        YQ_ARCH="arm64"; \
+    else \
+        echo "ERROR: Unsupported architecture: $ARCH" && exit 1; \
+    fi && \
+    wget -q -O /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_${YQ_ARCH} && \
+    chmod +x /usr/local/bin/yq
+
 # Install cqlai
 # Note: Uses uname -m for architecture detection. For multi-arch builds with buildx,
 # this will be set correctly by the platform-specific base image.
