@@ -1,0 +1,6 @@
+# Trivy Ignore File for AxonDB Search (OpenSearch 3.3.2)
+# Add specific CVEs to ignore here as needed, with justification
+# Format: CVE-YYYY-NNNNN
+
+# Currently no ignored vulnerabilities
+# Any issues found by Trivy should be reviewed and addressed
