@@ -1,0 +1,6 @@
+secrets:
+  - id: "AsymmetricPrivateKey"
+    paths:
+      - "/etc/opensearch/certs/admin-key.pem"
+      - "/etc/opensearch/certs/node-key.pem"
+      - "/etc/opensearch/certs/root-ca-key.pem"
