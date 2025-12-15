@@ -1,0 +1,78 @@
+name: 'AxonDB Search Verify No Startup Errors'
+description: 'Verifies OpenSearch started without errors in logs'
+inputs:
+  container_name:
+    description: 'Name of the running container'
+    required: true
+    default: 'axondb-search-test'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check for ERROR level messages in logs
+      shell: bash
+      run: |
+        echo "=== Checking for ERROR messages in OpenSearch logs ==="
+
+        # Get container logs
+        docker logs ${{ inputs.container_name }} > /tmp/opensearch-logs.txt 2>&1
+
+        # Check for ERROR level log messages (OpenSearch format: "[YYYY-MM-DD][ERROR][...]")
+        # Exclude expected errors during testing (like authentication failures from tests)
+        if grep -E "\[ERROR\]" /tmp/opensearch-logs.txt | grep -v "FAILED_LOGIN" | grep -v "Unauthorized"; then
+          echo "ERROR: Found ERROR level messages in logs"
+          exit 1
+        fi
+
+        echo "✓ No unexpected ERROR level messages found"
+
+    - name: Check for FATAL messages
+      shell: bash
+      run: |
+        echo "=== Checking for FATAL messages ==="
+
+        if docker logs ${{ inputs.container_name }} 2>&1 | grep -i "FATAL"; then
+          echo "ERROR: Found FATAL messages in logs"
+          exit 1
+        fi
+
+        echo "✓ No FATAL messages found"
+
+    - name: Check for OutOfMemoryError
+      shell: bash
+      run: |
+        echo "=== Checking for OutOfMemoryError ==="
+
+        if docker logs ${{ inputs.container_name }} 2>&1 | grep -E "OutOfMemoryError|OOM"; then
+          echo "ERROR: Found OutOfMemoryError in logs"
+          exit 1
+        fi
+
+        echo "✓ No OutOfMemoryError found"
+
+    - name: Verify OpenSearch started successfully
+      shell: bash
+      run: |
+        echo "=== Verifying OpenSearch startup ==="
+
+        docker logs ${{ inputs.container_name }} > /tmp/opensearch-logs.txt 2>&1
+
+        # Check for successful startup message (OpenSearch logs "started" when ready)
+        if ! grep -q "started" /tmp/opensearch-logs.txt; then
+          echo "ERROR: 'started' message not found in logs"
+          echo "Last 100 lines of logs:"
+          tail -100 /tmp/opensearch-logs.txt
+          exit 1
+        fi
+
+        echo "✓ OpenSearch started successfully"
+
+    - name: Summary
+      shell: bash
+      run: |
+        echo ""
+        echo "✓ Startup verification complete"
+        echo "  - No ERROR messages ✓"
+        echo "  - No FATAL messages ✓"
+        echo "  - No OutOfMemoryError ✓"
+        echo "  - OpenSearch started successfully ✓"
