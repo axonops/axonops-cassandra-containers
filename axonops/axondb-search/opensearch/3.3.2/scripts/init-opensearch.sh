@@ -204,9 +204,9 @@ EOF
     if bash "${OPENSEARCH_HOME}/plugins/opensearch-security/tools/securityadmin.sh" \
         -cd "${OPENSEARCH_PATH_CONF}/opensearch-security" \
         -icl -nhnv \
-        -cacert "${OPENSEARCH_PATH_CONF}/certs/root-ca.pem" \
-        -cert "${OPENSEARCH_PATH_CONF}/certs/admin.pem" \
-        -key "${OPENSEARCH_PATH_CONF}/certs/admin-key.pem" \
+        -cacert "${OPENSEARCH_PATH_CONF}/certs/axondbsearch-default-root-ca.pem" \
+        -cert "${OPENSEARCH_PATH_CONF}/certs/axondbsearch-default-admin.pem" \
+        -key "${OPENSEARCH_PATH_CONF}/certs/axondbsearch-default-admin-key.pem" \
         -h localhost; then
         echo "✓ Security configuration applied successfully"
         echo ""

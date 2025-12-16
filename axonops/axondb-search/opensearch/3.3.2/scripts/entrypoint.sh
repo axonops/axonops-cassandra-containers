@@ -208,6 +208,63 @@ fi
 # Performance Analyzer - disabled by default (AxonOps provides monitoring)
 export DISABLE_PERFORMANCE_ANALYZER_AGENT_CLI="${DISABLE_PERFORMANCE_ANALYZER_AGENT_CLI:-true}"
 
+# Generate AxonOps-branded certificates at runtime (if needed)
+# This generates unique certificates per deployment instead of embedding them in the image
+GENERATE_CERTS_ON_STARTUP="${GENERATE_CERTS_ON_STARTUP:-true}"
+CERT_SEMAPHORE="${OPENSEARCH_DATA_DIR}/.axonops/generate-certs.done"
+CERT_FILE="${OPENSEARCH_PATH_CONF}/certs/axondbsearch-default-node.pem"
+
+if [ "$GENERATE_CERTS_ON_STARTUP" = "true" ]; then
+    echo "=== Certificate Generation (Runtime) ==="
+
+    if [ ! -f "$CERT_FILE" ]; then
+        # Certs don't exist - check if we generated them before but they're gone (ephemeral storage)
+        if [ -f "$CERT_SEMAPHORE" ] && grep -q "certs_generated\|certs_regenerated" "$CERT_SEMAPHORE" 2>/dev/null; then
+            echo "⚠ Certificates were generated before but are missing (container restart with ephemeral storage)"
+            echo "  Regenerating certificates..."
+            /usr/local/bin/generate-certs.sh
+            mkdir -p "$(dirname "$CERT_SEMAPHORE")"
+            {
+                echo "COMPLETED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+                echo "RESULT=success"
+                echo "REASON=certs_regenerated_after_restart"
+            } > "$CERT_SEMAPHORE"
+            echo "  ✓ Certificates regenerated"
+        else
+            # First time generation
+            echo "  Generating AxonOps-branded certificates..."
+            /usr/local/bin/generate-certs.sh
+            mkdir -p "$(dirname "$CERT_SEMAPHORE")"
+            {
+                echo "COMPLETED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+                echo "RESULT=success"
+                echo "REASON=certs_generated"
+            } > "$CERT_SEMAPHORE"
+            echo "  ✓ Certificates generated for first time"
+        fi
+    else
+        echo "  ✓ Certificates already exist (user-provided or previously generated)"
+        mkdir -p "$(dirname "$CERT_SEMAPHORE")"
+        {
+            echo "COMPLETED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "RESULT=skipped"
+            echo "REASON=certs_already_exist"
+        } > "$CERT_SEMAPHORE"
+    fi
+    echo ""
+else
+    echo "=== Certificate Generation Disabled ==="
+    echo "  GENERATE_CERTS_ON_STARTUP=false"
+    echo "  Ensure certificates are provided via volume mount!"
+    mkdir -p "$(dirname "$CERT_SEMAPHORE")"
+    {
+        echo "COMPLETED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        echo "RESULT=skipped"
+        echo "REASON=disabled_by_env_var"
+    } > "$CERT_SEMAPHORE"
+    echo ""
+fi
+
 # Create custom admin user BEFORE starting OpenSearch (if requested)
 # This REPLACES the default admin user in internal_users.yml
 # Security: Only ONE admin user should exist (either default OR custom, never both)
