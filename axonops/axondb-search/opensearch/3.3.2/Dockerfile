@@ -125,21 +125,15 @@ RUN mkdir -p "$OPENSEARCH_HOME" /licenses && \
 COPY --chown=opensearch:root config/jvm.options /etc/opensearch/jvm.options
 COPY --chown=opensearch:root config/log4j2.properties /etc/opensearch/log4j2.properties
 
-# Install demo SSL configuration, generate AxonOps certs, and delete demo certs in ONE layer
-# This prevents Trivy from detecting demo certificates in intermediate layers
-# Demo script sets up security infrastructure, then we replace certs and delete demos
-COPY scripts/generate-certs.sh /tmp/generate-certs.sh
+# Install demo SSL configuration and delete demo certs in ONE layer
+# Certificates will be generated at RUNTIME (not build time) to avoid Trivy secret detection
+# Demo script sets up security infrastructure, then we delete demo certs
 RUN cd ${OPENSEARCH_HOME} && \
     DISABLE_INSTALL_DEMO_CONFIG=false \
     OPENSEARCH_INITIAL_ADMIN_PASSWORD='MyS3cur3P@ss2025' \
     bash ${OPENSEARCH_HOME}/plugins/opensearch-security/tools/install_demo_configuration.sh -y -i -s && \
     chown -R opensearch:root /etc/opensearch && \
     echo "Demo SSL infrastructure created" && \
-    chmod +x /tmp/generate-certs.sh && \
-    OPENSEARCH_PATH_CONF=/etc/opensearch /tmp/generate-certs.sh && \
-    rm /tmp/generate-certs.sh && \
-    chown -R opensearch:root /etc/opensearch/certs && \
-    echo "AxonOps certificates generated" && \
     rm -f /etc/opensearch/esnode.pem \
           /etc/opensearch/esnode-key.pem \
           /etc/opensearch/kirk.pem \
@@ -148,7 +142,11 @@ RUN cd ${OPENSEARCH_HOME} && \
           /etc/opensearch/root-ca-key.pem \
           /etc/opensearch/*.srl \
           /etc/opensearch/securityadmin_demo.sh && \
-    echo "✓ Demo certificates removed in same layer (won't appear in Trivy scan)"
+    echo "✓ Demo certificates removed in same layer"
+
+# Copy certificate generation script (will be run at container startup)
+COPY scripts/generate-certs.sh /usr/local/bin/generate-certs.sh
+RUN chmod 755 /usr/local/bin/generate-certs.sh
 
 # Now overlay our customized opensearch.yml and security configs
 # This updates the security plugin to use our AxonOps certificates instead of demo certs

@@ -17,6 +17,9 @@ CN_ROOT="AxonOps Root CA"
 CN_NODE="axondbsearch.axonops.com"
 CN_ADMIN="admin.axondbsearch.axonops.com"
 
+# Prefix for generated certificate files (makes them clearly identifiable as defaults)
+FILE_PREFIX="axondbsearch-default-"
+
 # Create certs directory
 mkdir -p "$CERTS_DIR"
 cd "$CERTS_DIR"
@@ -31,27 +34,28 @@ echo ""
 # 1. Generate Root CA
 echo "1. Generating Root CA..."
 openssl req -x509 -newkey rsa:3072 -sha256 -days "$VALIDITY_DAYS" \
-  -nodes -keyout root-ca-key.pem -out root-ca.pem \
+  -nodes -keyout ${FILE_PREFIX}root-ca-key.pem -out ${FILE_PREFIX}root-ca.pem \
   -subj "/CN=${CN_ROOT}/O=${ORG}/OU=${ORG_UNIT}" \
   2>/dev/null
 
-if [ ! -f root-ca.pem ] || [ ! -f root-ca-key.pem ]; then
+if [ ! -f ${FILE_PREFIX}root-ca.pem ] || [ ! -f ${FILE_PREFIX}root-ca-key.pem ]; then
     echo "ERROR: Failed to generate root CA"
     exit 1
 fi
 echo "   ✓ Root CA generated: $CN_ROOT"
+echo "   Files: ${FILE_PREFIX}root-ca.pem, ${FILE_PREFIX}root-ca-key.pem"
 
 # 2. Generate Node Certificate
 echo "2. Generating Node Certificate..."
 
 # Create node CSR
 openssl req -new -newkey rsa:3072 -sha256 -nodes \
-  -keyout node-key-temp.pem -out node.csr \
+  -keyout ${FILE_PREFIX}node-key-temp.pem -out ${FILE_PREFIX}node.csr \
   -subj "/CN=${CN_NODE}/O=${ORG}/OU=${ORG_UNIT}" \
   2>/dev/null
 
 # Create SAN configuration for node certificate
-cat > node-san.cnf <<EOF
+cat > ${FILE_PREFIX}node-san.cnf <<EOF
 [req]
 distinguished_name = req_distinguished_name
 req_extensions = v3_req
@@ -70,19 +74,19 @@ IP.2 = ::1
 EOF
 
 # Sign node certificate with Root CA
-openssl x509 -req -in node.csr -CA root-ca.pem -CAkey root-ca-key.pem \
-  -CAcreateserial -out node.pem -days "$VALIDITY_DAYS" \
-  -extensions v3_req -extfile node-san.cnf \
+openssl x509 -req -in ${FILE_PREFIX}node.csr -CA ${FILE_PREFIX}root-ca.pem -CAkey ${FILE_PREFIX}root-ca-key.pem \
+  -CAcreateserial -out ${FILE_PREFIX}node.pem -days "$VALIDITY_DAYS" \
+  -extensions v3_req -extfile ${FILE_PREFIX}node-san.cnf \
   2>/dev/null
 
 # Convert key to PKCS#8 format (required by OpenSearch)
-openssl pkcs8 -topk8 -inform PEM -outform PEM -in node-key-temp.pem \
-  -out node-key.pem -nocrypt
+openssl pkcs8 -topk8 -inform PEM -outform PEM -in ${FILE_PREFIX}node-key-temp.pem \
+  -out ${FILE_PREFIX}node-key.pem -nocrypt
 
 # Cleanup
-rm -f node.csr node-key-temp.pem node-san.cnf
+rm -f ${FILE_PREFIX}node.csr ${FILE_PREFIX}node-key-temp.pem ${FILE_PREFIX}node-san.cnf
 
-if [ ! -f node.pem ] || [ ! -f node-key.pem ]; then
+if [ ! -f ${FILE_PREFIX}node.pem ] || [ ! -f ${FILE_PREFIX}node-key.pem ]; then
     echo "ERROR: Failed to generate node certificate"
     exit 1
 fi
@@ -93,23 +97,23 @@ echo "3. Generating Admin Client Certificate..."
 
 # Create admin CSR
 openssl req -new -newkey rsa:3072 -sha256 -nodes \
-  -keyout admin-key-temp.pem -out admin.csr \
+  -keyout ${FILE_PREFIX}admin-key-temp.pem -out ${FILE_PREFIX}admin.csr \
   -subj "/CN=${CN_ADMIN}/O=${ORG}/OU=${ORG_UNIT}" \
   2>/dev/null
 
 # Sign admin certificate with Root CA
-openssl x509 -req -in admin.csr -CA root-ca.pem -CAkey root-ca-key.pem \
-  -CAcreateserial -out admin.pem -days "$VALIDITY_DAYS" \
+openssl x509 -req -in ${FILE_PREFIX}admin.csr -CA ${FILE_PREFIX}root-ca.pem -CAkey ${FILE_PREFIX}root-ca-key.pem \
+  -CAcreateserial -out ${FILE_PREFIX}admin.pem -days "$VALIDITY_DAYS" \
   2>/dev/null
 
 # Convert key to PKCS#8 format
-openssl pkcs8 -topk8 -inform PEM -outform PEM -in admin-key-temp.pem \
-  -out admin-key.pem -nocrypt
+openssl pkcs8 -topk8 -inform PEM -outform PEM -in ${FILE_PREFIX}admin-key-temp.pem \
+  -out ${FILE_PREFIX}admin-key.pem -nocrypt
 
 # Cleanup
-rm -f admin.csr admin-key-temp.pem root-ca.srl
+rm -f ${FILE_PREFIX}admin.csr ${FILE_PREFIX}admin-key-temp.pem ${FILE_PREFIX}root-ca.srl
 
-if [ ! -f admin.pem ] || [ ! -f admin-key.pem ]; then
+if [ ! -f ${FILE_PREFIX}admin.pem ] || [ ! -f ${FILE_PREFIX}admin-key.pem ]; then
     echo "ERROR: Failed to generate admin certificate"
     exit 1
 fi
@@ -119,8 +123,8 @@ echo ""
 echo "=== Setting Permissions ==="
 
 # Set permissions
-chmod 644 root-ca.pem node.pem admin.pem
-chmod 600 root-ca-key.pem node-key.pem admin-key.pem
+chmod 644 ${FILE_PREFIX}root-ca.pem ${FILE_PREFIX}node.pem ${FILE_PREFIX}admin.pem
+chmod 600 ${FILE_PREFIX}root-ca-key.pem ${FILE_PREFIX}node-key.pem ${FILE_PREFIX}admin-key.pem
 
 # Set ownership (if running as root during build)
 if [ "$(id -u)" = "0" ] && command -v chown >/dev/null 2>&1; then
@@ -132,7 +136,7 @@ echo ""
 
 # Validate all files exist
 echo "=== Validating Certificate Generation ==="
-REQUIRED_FILES="root-ca.pem root-ca-key.pem node.pem node-key.pem admin.pem admin-key.pem"
+REQUIRED_FILES="${FILE_PREFIX}root-ca.pem ${FILE_PREFIX}root-ca-key.pem ${FILE_PREFIX}node.pem ${FILE_PREFIX}node-key.pem ${FILE_PREFIX}admin.pem ${FILE_PREFIX}admin-key.pem"
 for file in $REQUIRED_FILES; do
     if [ ! -f "$file" ]; then
         echo "ERROR: Required file missing: $file"
@@ -151,17 +155,17 @@ echo ""
 echo "=== Certificate Details ==="
 echo ""
 echo "Root CA:"
-openssl x509 -in root-ca.pem -noout -subject -dates 2>/dev/null | sed 's/^/   /'
+openssl x509 -in ${FILE_PREFIX}root-ca.pem -noout -subject -dates 2>/dev/null | sed 's/^/   /'
 
 echo ""
 echo "Node Certificate:"
-openssl x509 -in node.pem -noout -subject -dates 2>/dev/null | sed 's/^/   /'
+openssl x509 -in ${FILE_PREFIX}node.pem -noout -subject -dates 2>/dev/null | sed 's/^/   /'
 echo "   Subject Alternative Names:"
-openssl x509 -in node.pem -noout -text 2>/dev/null | grep -A1 "Subject Alternative Name" | tail -1 | sed 's/^/   /'
+openssl x509 -in ${FILE_PREFIX}node.pem -noout -text 2>/dev/null | grep -A1 "Subject Alternative Name" | tail -1 | sed 's/^/   /'
 
 echo ""
 echo "Admin Certificate:"
-openssl x509 -in admin.pem -noout -subject -dates 2>/dev/null | sed 's/^/   /'
+openssl x509 -in ${FILE_PREFIX}admin.pem -noout -subject -dates 2>/dev/null | sed 's/^/   /'
 
 echo ""
 echo "✓ All certificates generated successfully"
