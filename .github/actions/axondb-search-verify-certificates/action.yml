@@ -18,8 +18,8 @@ runs:
       run: |
         echo "=== Verifying Certificate Files ==="
 
-        # Check AxonOps certificate files exist
-        for cert in root-ca.pem node.pem node-key.pem admin.pem admin-key.pem; do
+        # Check AxonOps certificate files exist (with axondbsearch-default- prefix)
+        for cert in axondbsearch-default-root-ca.pem axondbsearch-default-node.pem axondbsearch-default-node-key.pem axondbsearch-default-admin.pem axondbsearch-default-admin-key.pem; do
           if docker exec ${{ inputs.container_name }} test -f /etc/opensearch/certs/$cert; then
             echo "✓ $cert exists"
           else
@@ -100,8 +100,31 @@ runs:
           exit 1
         fi
 
+    - name: Verify certificate generation semaphore
+      shell: bash
+      run: |
+        echo "=== Verifying Certificate Generation Semaphore ==="
+
+        if ! docker exec ${{ inputs.container_name }} test -f /var/lib/opensearch/.axonops/generate-certs.done; then
+          echo "ERROR: Certificate generation semaphore not found"
+          exit 1
+        fi
+
+        echo "Semaphore content:"
+        docker exec ${{ inputs.container_name }} cat /var/lib/opensearch/.axonops/generate-certs.done
+
+        RESULT=$(docker exec ${{ inputs.container_name }} grep "^RESULT=" /var/lib/opensearch/.axonops/generate-certs.done | cut -d'=' -f2)
+
+        if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
+          echo "ERROR: Certificate generation result invalid: $RESULT"
+          exit 1
+        fi
+
+        echo "✓ Certificate generation semaphore valid (RESULT=$RESULT)"
+
         echo ""
         echo "✓ Certificate verification complete"
         echo "  - AxonOps-branded certificates in use"
         echo "  - Demo certificates removed"
         echo "  - Unsafe demo certificates blocked"
+        echo "  - Runtime certificate generation semaphore validated"

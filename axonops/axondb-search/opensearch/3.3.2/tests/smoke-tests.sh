@@ -611,14 +611,45 @@ fi
 
 echo ""
 echo "========================================" | tee -a "$RESULTS_FILE"
+echo "CERTIFICATE GENERATION TESTS (v1.1.0)" | tee -a "$RESULTS_FILE"
+echo "========================================" | tee -a "$RESULTS_FILE"
+echo ""
+
+# Test 37: Verify certificate generation semaphore
+run_test
+echo "Test 37: Certificate generation semaphore"
+CERT_SEMAPHORE=$(podman exec "$CONTAINER_NAME" cat /var/lib/opensearch/.axonops/generate-certs.done 2>/dev/null)
+if echo "$CERT_SEMAPHORE" | grep -q "^RESULT="; then
+    RESULT=$(echo "$CERT_SEMAPHORE" | grep "^RESULT=" | cut -d'=' -f2)
+    if [ "$RESULT" = "success" ] || [ "$RESULT" = "skipped" ]; then
+        pass_test "Certificate generation semaphore valid (RESULT=$RESULT)"
+    else
+        fail_test "Cert generation semaphore" "RESULT=$RESULT (expected success or skipped)"
+    fi
+else
+    fail_test "Cert generation semaphore" "RESULT field not found"
+fi
+
+# Test 38: Verify cert files have correct prefix
+run_test
+echo "Test 38: Certificate files use axondbsearch-default- prefix"
+CERT_COUNT=$(podman exec "$CONTAINER_NAME" sh -c 'ls /etc/opensearch/certs/axondbsearch-default-*.pem 2>/dev/null | wc -l')
+if [ "$CERT_COUNT" -ge 6 ]; then
+    pass_test "Found $CERT_COUNT cert files with axondbsearch-default- prefix"
+else
+    fail_test "Cert file prefix" "Expected 6+ files, found $CERT_COUNT"
+fi
+
+echo ""
+echo "========================================" | tee -a "$RESULTS_FILE"
 echo "PROCESS FAILURE DETECTION TEST (DESTRUCTIVE - RUNS LAST)" | tee -a "$RESULTS_FILE"
 echo "========================================" | tee -a "$RESULTS_FILE"
 echo ""
 
-# Test 37: Kill OpenSearch process and verify liveness healthcheck fails
+# Test 39: Kill OpenSearch process and verify liveness healthcheck fails
 # NOTE: This test is DESTRUCTIVE and runs last because it kills the container
 run_test
-echo "Test 37: Healthcheck detects killed process"
+echo "Test 39: Healthcheck detects killed process"
 # Get OpenSearch PID
 OPENSEARCH_PID=$(podman exec "$CONTAINER_NAME" pgrep -f "org.opensearch.bootstrap.OpenSearch" 2>/dev/null | head -1)
 if [ -n "$OPENSEARCH_PID" ]; then
@@ -643,9 +674,9 @@ echo "ADVANCED ENVIRONMENT VARIABLE TESTS (NEW SETTINGS)" | tee -a "$RESULTS_FIL
 echo "========================================" | tee -a "$RESULTS_FILE"
 echo ""
 
-# Test 38: Start container with advanced env vars to verify they're written to opensearch.yml
+# Test 40: Start container with advanced env vars to verify they're written to opensearch.yml
 run_test
-echo "Test 38: Advanced env vars written to opensearch.yml"
+echo "Test 40: Advanced env vars written to opensearch.yml"
 echo "  Starting container with advanced settings..."
 
 ADV_CONTAINER="opensearch-advanced-env-test"
