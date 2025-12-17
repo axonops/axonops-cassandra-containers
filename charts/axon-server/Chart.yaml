@@ -9,15 +9,15 @@ keywords:
   - observability
   - metrics
   - alerting
+  - kafka
 maintainers:
-  - name: Sergio Rua
-    email: sergio@axonops.com
+  - name: AxonOps Team
+    email: info@axonops.com
     url: https://axonops.com
-  - name: Richard Gooding
-    email: richard@axonops.com
-    url: https://axonops.com
+
 sources:
   - https://github.com/axonops/axonops-containers
+
 type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.

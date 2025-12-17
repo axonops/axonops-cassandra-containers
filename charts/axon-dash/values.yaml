@@ -37,15 +37,15 @@ podAnnotations: {}
 podLabels: {}
 
 podSecurityContext: {}
-  # fsGroup: 2000
+  # fsGroup: 9988
 
 securityContext: {}
   # capabilities:
   #   drop:
   #   - ALL
-  # readOnlyRootFilesystem: true
+  # readOnlyRootFilesystem: false
   # runAsNonRoot: true
-  # runAsUser: 1000
+  # runAsUser: 9988
 
 # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:

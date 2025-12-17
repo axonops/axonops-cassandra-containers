@@ -1,253 +1,166 @@
-# AxonOps Server Helm Chart
+# axon-server
 
-AxonOps Server is a unified observability platform for Apache Cassandra that provides comprehensive monitoring, alerting, backup, and management capabilities.
+![Version: 2.0.0](https://img.shields.io/badge/Version-2.0.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: latest](https://img.shields.io/badge/AppVersion-latest-informational?style=flat-square)
 
-## Prerequisites
+Install AxonOps server - Unified observability platform for Apache Cassandra
 
-- Kubernetes 1.19+
-- Helm 3.2.0+
-- PV provisioner support in the underlying infrastructure (if persistence is enabled)
-- Elasticsearch cluster (for metrics storage)
+**Homepage:** <https://axonops.com>
 
-## Installing the Chart
+## Maintainers
 
-To install the chart with the release name `axonops-server`:
+| Name | Email | Url |
+| ---- | ------ | --- |
+| AxonOps Team | <info@axonops.com> | <https://axonops.com> |
 
-```bash
-helm install axonops-server ./axon-server \
-  --set config.org_name="myorg" \
-  --set config.license_key="your-license-key" \
-  --set elasticHost="http://elasticsearch:9200" \
-  --set dashboardUrl="https://axonops.mycompany.com"
-```
+## Source Code
 
-## Uninstalling the Chart
+* <https://github.com/axonops/axonops-containers>
 
-To uninstall/delete the `axonops-server` deployment:
+## Requirements
 
-```bash
-helm delete axonops-server
-```
+Kubernetes: `>=1.19.0-0`
 
-## Configuration
+## Values
 
-The following table lists the configurable parameters of the AxonOps Server chart and their default values.
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| affinity | object | `{}` |  |
+| agentIngress.annotations | object | `{}` |  |
+| agentIngress.className | string | `"nginx"` |  |
+| agentIngress.enabled | bool | `false` |  |
+| agentIngress.hosts[0].host | string | `"agents.example.com"` |  |
+| agentIngress.hosts[0].paths[0].path | string | `"/"` |  |
+| agentIngress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| agentIngress.tls | list | `[]` |  |
+| agentService.annotations | object | `{}` |  |
+| agentService.clusterIP | string | `""` |  |
+| agentService.externalIPs | list | `[]` |  |
+| agentService.labels | object | `{}` |  |
+| agentService.listenPort | int | `1888` |  |
+| agentService.loadBalancerIP | string | `""` |  |
+| agentService.loadBalancerSourceRanges | list | `[]` |  |
+| agentService.nodePort | int | `0` |  |
+| agentService.type | string | `"ClusterIP"` |  |
+| apiIngress.annotations | object | `{}` |  |
+| apiIngress.className | string | `"traefik"` |  |
+| apiIngress.enabled | bool | `false` |  |
+| apiIngress.hosts[0].host | string | `"api.example.com"` |  |
+| apiIngress.hosts[0].paths[0].path | string | `"/"` |  |
+| apiIngress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| apiIngress.tls | list | `[]` |  |
+| apiService.annotations | object | `{}` |  |
+| apiService.clusterIP | string | `""` |  |
+| apiService.externalIPs | list | `[]` |  |
+| apiService.labels | object | `{}` |  |
+| apiService.listenPort | int | `8080` |  |
+| apiService.loadBalancerIP | string | `""` |  |
+| apiService.loadBalancerSourceRanges | list | `[]` |  |
+| apiService.nodePort | int | `0` |  |
+| apiService.type | string | `"ClusterIP"` |  |
+| autoscaling.enabled | bool | `false` |  |
+| autoscaling.maxReplicas | int | `10` |  |
+| autoscaling.minReplicas | int | `1` |  |
+| autoscaling.targetCPUUtilizationPercentage | int | `80` |  |
+| config.alerting.notification_interval | string | `"3h"` |  |
+| config.auth.enabled | bool | `false` |  |
+| config.extraConfig.cql_autocreate_tables | bool | `true` |  |
+| config.extraConfig.cql_batch_size | int | `100` |  |
+| config.extraConfig.cql_hosts[0] | string | `"axondb-timeseries-headless.sergio.svc.cluster.local"` |  |
+| config.extraConfig.cql_keyspace_replication | string | `"{ 'class': 'NetworkTopologyStrategy', 'axonopsdb_dc1': 1 }"` |  |
+| config.extraConfig.cql_local_dc | string | `"axonopsdb_dc1"` |  |
+| config.extraConfig.cql_max_searchqueriesparallelism | int | `100` |  |
+| config.extraConfig.cql_metrics_cache_max_items | int | `500000` |  |
+| config.extraConfig.cql_metrics_cache_max_size | int | `128` |  |
+| config.extraConfig.cql_page_size | int | `100` |  |
+| config.extraConfig.cql_password | string | `"axonops"` |  |
+| config.extraConfig.cql_proto_version | int | `4` |  |
+| config.extraConfig.cql_reconnectionpolicy_initialinterval | string | `"1s"` |  |
+| config.extraConfig.cql_reconnectionpolicy_maxinterval | string | `"10s"` |  |
+| config.extraConfig.cql_reconnectionpolicy_maxretries | int | `10` |  |
+| config.extraConfig.cql_retrypolicy_max | string | `"10s"` |  |
+| config.extraConfig.cql_retrypolicy_min | string | `"2s"` |  |
+| config.extraConfig.cql_retrypolicy_numretries | int | `3` |  |
+| config.extraConfig.cql_skip_verify | bool | `true` |  |
+| config.extraConfig.cql_ssl | bool | `true` |  |
+| config.extraConfig.cql_username | string | `"axonops"` |  |
+| config.license_key | string | `""` |  |
+| config.listener.agents_port | int | `1888` |  |
+| config.listener.api_port | int | `8080` |  |
+| config.listener.host | string | `"0.0.0.0"` |  |
+| config.org_name | string | `"example"` |  |
+| config.sslSecretName | string | `""` |  |
+| config.tls.mode | string | `"disabled"` |  |
+| dashboardUrl | string | `"https://axonops.example.com"` |  |
+| deployment.annotations | object | `{}` |  |
+| deployment.env | object | `{}` |  |
+| deployment.secretEnv | string | `""` |  |
+| extraVolumeMounts | list | `[]` |  |
+| extraVolumes | list | `[]` |  |
+| fullnameOverride | string | `""` |  |
+| global.dockerRegistry | string | `""` |  |
+| httpRoute.annotations | object | `{}` |  |
+| httpRoute.enabled | bool | `false` |  |
+| httpRoute.hostnames[0] | string | `"api.example.com"` |  |
+| httpRoute.parentRefs[0].name | string | `"gateway"` |  |
+| httpRoute.parentRefs[0].sectionName | string | `"http"` |  |
+| httpRoute.rules[0].matches[0].path.type | string | `"PathPrefix"` |  |
+| httpRoute.rules[0].matches[0].path.value | string | `"/"` |  |
+| image.pullPolicy | string | `"IfNotPresent"` |  |
+| image.repository | string | `"registry.axonops.com/axonops-public/axonops-docker/axon-server"` |  |
+| image.tag | string | `""` |  |
+| imagePullSecrets | list | `[]` |  |
+| initResources | object | `{}` |  |
+| livenessProbe.failureThreshold | int | `3` |  |
+| livenessProbe.httpGet.path | string | `"/api/v1/healthz"` |  |
+| livenessProbe.httpGet.port | string | `"api"` |  |
+| livenessProbe.initialDelaySeconds | int | `30` |  |
+| livenessProbe.periodSeconds | int | `10` |  |
+| livenessProbe.timeoutSeconds | int | `5` |  |
+| nameOverride | string | `""` |  |
+| nodeSelector | object | `{}` |  |
+| persistence.accessMode | string | `"ReadWriteOnce"` |  |
+| persistence.annotations | object | `{}` |  |
+| persistence.enableInitChown | bool | `true` |  |
+| persistence.enabled | bool | `true` |  |
+| persistence.size | string | `"1Gi"` |  |
+| persistence.storageClass | string | `""` |  |
+| podAnnotations | object | `{}` |  |
+| podLabels | object | `{}` |  |
+| podManagementPolicy | string | `"OrderedReady"` |  |
+| podSecurityContext.enabled | bool | `false` |  |
+| podSecurityContext.fsGroup | int | `9988` |  |
+| podSecurityContext.runAsNonRoot | bool | `true` |  |
+| podSecurityContext.runAsUser | int | `9988` |  |
+| readinessProbe.failureThreshold | int | `3` |  |
+| readinessProbe.httpGet.path | string | `"/api/v1/healthz"` |  |
+| readinessProbe.httpGet.port | string | `"api"` |  |
+| readinessProbe.initialDelaySeconds | int | `10` |  |
+| readinessProbe.periodSeconds | int | `5` |  |
+| readinessProbe.timeoutSeconds | int | `3` |  |
+| replicaCount | int | `1` |  |
+| resources | object | `{}` |  |
+| searchDb.hosts[0] | string | `"https://axondb-search-cluster-master:9200"` |  |
+| searchDb.password | string | `"MyS3cur3P@ss2025"` |  |
+| searchDb.skip_verify | bool | `true` |  |
+| searchDb.username | string | `"admin"` |  |
+| securityContext.capabilities.drop[0] | string | `"ALL"` |  |
+| securityContext.readOnlyRootFilesystem | bool | `false` |  |
+| securityContext.runAsNonRoot | bool | `true` |  |
+| securityContext.runAsUser | int | `9988` |  |
+| serviceAccount.annotations | object | `{}` |  |
+| serviceAccount.automount | bool | `true` |  |
+| serviceAccount.create | bool | `true` |  |
+| serviceAccount.createClusterRole | bool | `false` |  |
+| serviceAccount.name | string | `""` |  |
+| sidecarResources | object | `{}` |  |
+| startupProbe.failureThreshold | int | `60` |  |
+| startupProbe.httpGet.path | string | `"/api/v1/healthz"` |  |
+| startupProbe.httpGet.port | string | `"api"` |  |
+| startupProbe.initialDelaySeconds | int | `0` |  |
+| startupProbe.periodSeconds | int | `2` |  |
+| startupProbe.timeoutSeconds | int | `3` |  |
+| tolerations | list | `[]` |  |
+| updateStrategy.type | string | `"RollingUpdate"` |  |
 
-### Global Parameters
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `image.repository` | AxonOps Server image repository | `registry.axonops.com/axonops-public/axonops-docker/axon-server` |
-| `image.tag` | AxonOps Server image tag | `latest` |
-| `image.pullPolicy` | Image pull policy | `IfNotPresent` |
-| `imagePullSecrets` | Secrets for pulling images from private registry | `[]` |
-| `nameOverride` | Override chart name | `""` |
-| `fullnameOverride` | Override full name | `""` |
-| `replicaCount` | Number of replicas (should be 1 for AxonOps Server) | `1` |
-
-### AxonOps Configuration
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `elasticHost` | Elasticsearch endpoint URL | `http://axonops-elastic:9200` |
-| `dashboardUrl` | Publicly accessible URL for AxonOps Dashboard | `https://axonops.example.com` |
-| `config.org_name` | Your organization name | `example` |
-| `config.license_key` | AxonOps license key | `""` |
-| `config.listener.host` | Listen host for API and agents | `0.0.0.0` |
-| `config.listener.api_port` | API port (server <-> dashboard) | `8080` |
-| `config.listener.agents_port` | Agents port (server <-> agents) | `1888` |
-| `config.alerting.notification_interval` | Time before sending notification again | `3h` |
-| `config.tls.mode` | TLS mode: disabled, TLS, or mTLS | `disabled` |
-| `config.auth.enabled` | Enable authentication | `false` |
-| `config.extraConfig` | Additional configuration options | `{}` |
-
-### Service Configuration
-
-#### API Service
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `apiService.type` | Service type for API | `ClusterIP` |
-| `apiService.listenPort` | API service port | `8080` |
-| `apiService.annotations` | API service annotations | `{}` |
-| `apiService.nodePort` | NodePort for API (if type is NodePort) | `0` |
-| `apiService.loadBalancerIP` | LoadBalancer IP for API | `""` |
-
-#### Agent Service
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `agentService.type` | Service type for agents | `ClusterIP` |
-| `agentService.listenPort` | Agent service port | `1888` |
-| `agentService.annotations` | Agent service annotations | `{}` |
-| `agentService.nodePort` | NodePort for agents (if type is NodePort) | `0` |
-| `agentService.loadBalancerIP` | LoadBalancer IP for agents | `""` |
-
-### Ingress Configuration
-
-#### API Ingress
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `apiIngress.enabled` | Enable API ingress | `false` |
-| `apiIngress.className` | Ingress class name | `nginx` |
-| `apiIngress.annotations` | API ingress annotations | `{}` |
-| `apiIngress.hosts` | API ingress hosts | See values.yaml |
-| `apiIngress.tls` | API ingress TLS configuration | `[]` |
-
-#### Agent Ingress
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `agentIngress.enabled` | Enable agent ingress | `false` |
-| `agentIngress.className` | Ingress class name | `nginx` |
-| `agentIngress.annotations` | Agent ingress annotations | `{}` |
-| `agentIngress.hosts` | Agent ingress hosts | See values.yaml |
-| `agentIngress.tls` | Agent ingress TLS configuration | `[]` |
-
-### Persistence
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `persistence.enabled` | Enable persistence | `true` |
-| `persistence.storageClass` | Storage class name | `""` |
-| `persistence.accessMode` | Access mode | `ReadWriteOnce` |
-| `persistence.size` | Volume size | `10Gi` |
-| `persistence.annotations` | PVC annotations | `{}` |
-
-### Security
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `serviceAccount.create` | Create service account | `true` |
-| `serviceAccount.automount` | Automount service account token | `true` |
-| `serviceAccount.createClusterRole` | Create ClusterRole for Cassandra discovery | `false` |
-| `serviceAccount.name` | Service account name | `""` |
-| `podSecurityContext.enabled` | Enable pod security context | `false` |
-| `podSecurityContext.runAsUser` | User ID | `1000` |
-| `podSecurityContext.fsGroup` | Group ID | `1000` |
-| `securityContext` | Container security context | See values.yaml |
-
-### Resources
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `resources.limits.cpu` | CPU limit | Not set |
-| `resources.limits.memory` | Memory limit | Not set |
-| `resources.requests.cpu` | CPU request | Not set |
-| `resources.requests.memory` | Memory request | Not set |
-
-### Probes
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `livenessProbe` | Liveness probe configuration | See values.yaml |
-| `readinessProbe` | Readiness probe configuration | See values.yaml |
-| `startupProbe` | Startup probe configuration | See values.yaml |
-
-### Other Parameters
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `nodeSelector` | Node selector | `{}` |
-| `tolerations` | Tolerations | `[]` |
-| `affinity` | Affinity rules | `{}` |
-| `extraVolumes` | Extra volumes | `[]` |
-| `extraVolumeMounts` | Extra volume mounts | `[]` |
-| `autoscaling.enabled` | Enable HPA | `false` |
-| `deployment.annotations` | Pod annotations | `{}` |
-| `deployment.env` | Environment variables | `{}` |
-| `deployment.secretEnv` | Secret with env variables | `""` |
-
-## Examples
-
-### Basic Installation
-
-```bash
-helm install axonops-server ./axon-server \
-  --set config.org_name="mycompany" \
-  --set config.license_key="xxx-xxx-xxx" \
-  --set elasticHost="http://elasticsearch.elastic.svc.cluster.local:9200"
-```
-
-### With External Access
-
-```bash
-helm install axonops-server ./axon-server \
-  --set config.org_name="mycompany" \
-  --set config.license_key="xxx-xxx-xxx" \
-  --set elasticHost="http://elasticsearch:9200" \
-  --set apiIngress.enabled=true \
-  --set apiIngress.hosts[0].host="api.axonops.example.com" \
-  --set agentIngress.enabled=true \
-  --set agentIngress.hosts[0].host="agents.axonops.example.com"
-```
-
-### With LDAP Authentication
-
-```yaml
-# values-ldap.yaml
-config:
-  auth:
-    enabled: true
-    type: "LDAP"
-    settings:
-      host: "ldap.example.com"
-      port: 636
-      base: "dc=example,dc=com"
-      useSSL: true
-      bindDN: "cn=admin,dc=example,dc=com"
-      bindPassword: "password"
-      userFilter: "(uid=%s)"
-```
-
-```bash
-helm install axonops-server ./axon-server -f values-ldap.yaml
-```
-
-### With Cassandra Discovery
-
-To enable automatic discovery of Cassandra nodes in the cluster:
-
-```bash
-helm install axonops-server ./axon-server \
-  --set serviceAccount.createClusterRole=true
-```
-
-## Upgrading
-
-To upgrade an existing release:
-
-```bash
-helm upgrade axonops-server ./axon-server \
-  --set config.org_name="mycompany" \
-  --set config.license_key="xxx-xxx-xxx"
-```
-
-## Troubleshooting
-
-### Check Server Logs
-
-```bash
-kubectl logs -l app.kubernetes.io/name=axon-server
-```
-
-### Verify Configuration
-
-```bash
-kubectl get configmap axonops-server-axon-server -o yaml
-```
-
-### Check Service Endpoints
-
-```bash
-kubectl get svc | grep axon-server
-```
-
-## License
-
-For licensing information, please contact [AxonOps](https://axonops.com).
-
-## Support
-
-For support, please visit [https://axonops.com](https://axonops.com) or contact support@axonops.com.
+----------------------------------------------
+Autogenerated from chart metadata using [helm-docs v1.14.2](https://github.com/norwoodj/helm-docs/releases/v1.14.2)
