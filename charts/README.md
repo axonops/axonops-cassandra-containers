@@ -4,9 +4,9 @@ Official Helm charts for deploying AxonOps on Kubernetes clusters.
 
 ## Overview
 
-AxonOps is a comprehensive monitoring, management, and operations platform for Apache Cassandra and compatible databases. These Helm charts enable you to deploy and manage the complete AxonOps stack on-premises in your Kubernetes environment.
+AxonOps is a comprehensive monitoring, management, and operations platform for [Apache Cassandra](https://axonops.com/cassandra-overview-axonops) and [Apache Kafka](https://axonops.com/kafka-overview). These Helm charts enable you to deploy and manage the complete AxonOps stack on-premises in your Kubernetes environment.
 
-The AxonOps platform consists of several components that work together to provide monitoring, alerting, backup/restore capabilities, and cluster management for your Cassandra infrastructure.
+The AxonOps platform consists of several components that work together to provide monitoring, alerting, backup/restore capabilities, and cluster management for your Apache Cassandra and Apache Kafka infrastructure.
 
 ## Architecture
 
@@ -143,17 +143,22 @@ For production deployments, consider the following:
 
 ## Getting Started with AxonOps
 
-Once deployed, AxonOps provides comprehensive monitoring and management for your Cassandra clusters:
+Once deployed, AxonOps provides comprehensive monitoring and management for your Apache Cassandra and Apache Kafka clusters:
 
-1. **Install AxonOps agents** on your Cassandra nodes
+1. **Install AxonOps agents** on your Cassandra or Kafka nodes
 2. **Configure agents** to connect to your AxonOps Server
 3. **Access the dashboard** to view metrics, alerts, and cluster health
 4. **Set up alerts** for proactive monitoring
-5. **Configure backups** for data protection
+5. **Configure backups** for data protection (Cassandra)
 
 For detailed instructions on getting started with AxonOps, including agent installation and configuration, please refer to the official documentation:
 
-=Ú **[AxonOps Getting Started Guide](https://axonops.com/docs/get_started/getting_started/)**
+ðŸ“š **[AxonOps Getting Started Guide](https://axonops.com/docs/get_started/getting_started/)**
+
+### Platform-Specific Guides
+
+- **Apache Cassandra**: [Getting Started with Cassandra Monitoring](https://axonops.com/docs/get_started/getting_started/)
+- **Apache Kafka**: [Kafka Monitoring Overview](https://axonops.com/kafka-overview)
 
 ## Documentation
 
@@ -161,6 +166,7 @@ For detailed instructions on getting started with AxonOps, including agent insta
 - **Installation Guide**: https://axonops.com/docs/get_started/getting_started/
 - **Configuration Reference**: https://axonops.com/docs/configuration/
 - **Kubernetes Deployment**: https://axonops.com/docs/installation/kubernetes/
+- **Kafka Monitoring**: https://axonops.com/kafka-overview
 
 ## Support
 

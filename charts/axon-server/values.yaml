@@ -323,9 +323,6 @@ persistence:
   # existingClaim: ""
   annotations: {}
 
-# Replicas for StatefulSet (should be 1 for axon-server)
-replicaCount: 1
-
 # Update strategy for StatefulSet
 updateStrategy:
   type: RollingUpdate

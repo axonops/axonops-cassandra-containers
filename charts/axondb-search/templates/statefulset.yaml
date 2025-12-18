@@ -395,6 +395,8 @@ spec:
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
         env:
+        - name: bootstrap.memory_lock
+          value: "false"
         - name: node.name
           valueFrom:
             fieldRef:
