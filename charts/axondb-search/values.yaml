@@ -153,7 +153,7 @@ tls:
       # Certificate renewal time before expiry
       renewBefore: 720h # 30 days
       # Secret name where the certificate will be stored
-      secretName: "axondb-timeseries-tls-cert"
+      secretName: ""
 
   # Manual TLS configuration (when cert-manager is disabled)
   manual:
@@ -345,8 +345,8 @@ podSecurityContext:
 
 securityContext:
   capabilities:
-    drop:
-      - ALL
+    add:
+    - IPC_LOCK
   # readOnlyRootFilesystem: true
   runAsNonRoot: true
   runAsUser: 999

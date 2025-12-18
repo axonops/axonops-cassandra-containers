@@ -79,7 +79,7 @@ http.port: 9200
 # For a single-node cluster, set discovery type to single-node:
 # This prevents bootstrap checks and allows the node to elect itself as cluster manager
 #
-discovery.type: single-node
+# discovery.type: single-node
 #
 # For more information, consult the discovery and cluster formation module documentation.
 #

@@ -21,6 +21,8 @@ spec:
     # Default DNS names for the StatefulSet pods
     - {{ include "opensearch.fullname" $ }}.{{ $.Release.Namespace }}.svc.cluster.local
     - "*.{{ include "opensearch.fullname" $ }}.{{ $.Release.Namespace }}.svc.cluster.local"
+    - "{{ template "opensearch.masterService" $ }}.{{ $.Release.Namespace }}.svc.cluster.local"
+    - "{{ template "opensearch.masterService" $ }}-headless.{{ $.Release.Namespace }}.svc.cluster.local"
     {{- range $i := until (int $.Values.replicaCount) }}
     - {{ include "opensearch.fullname" $ }}-{{ $i }}.{{ include "opensearch.fullname" $ }}.{{ $.Release.Namespace }}.svc.cluster.local
     {{- end }}

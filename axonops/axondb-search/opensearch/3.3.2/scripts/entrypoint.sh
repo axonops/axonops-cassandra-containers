@@ -103,7 +103,6 @@ export OPENSEARCH_JAVA_OPTS="-Dopensearch.cgroups.hierarchy.override=/ $OPENSEAR
 export OPENSEARCH_CLUSTER_NAME="${OPENSEARCH_CLUSTER_NAME:-axonopsdb-search}"
 export OPENSEARCH_NODE_NAME="${OPENSEARCH_NODE_NAME:-${HOSTNAME}}"
 export OPENSEARCH_NETWORK_HOST="${OPENSEARCH_NETWORK_HOST:-0.0.0.0}"
-export OPENSEARCH_DISCOVERY_TYPE="${OPENSEARCH_DISCOVERY_TYPE:-single-node}"
 
 # TLS/SSL settings (default: enabled)
 # When false, disables HTTPS on REST API (useful when TLS terminated at load balancer)
@@ -155,11 +154,6 @@ fi
 # Apply network host
 if [ -n "$OPENSEARCH_NETWORK_HOST" ]; then
     _sed-in-place "/etc/opensearch/opensearch.yml" -r 's/^(# )?(network\.host:).*/\2 '"$OPENSEARCH_NETWORK_HOST"'/'
-fi
-
-# Apply discovery type
-if [ -n "$OPENSEARCH_DISCOVERY_TYPE" ]; then
-    _sed-in-place "/etc/opensearch/opensearch.yml" -r 's/^(# )?(discovery\.type:).*/\2 '"$OPENSEARCH_DISCOVERY_TYPE"'/'
 fi
 
 # Apply heap size override to jvm.options if env var set
@@ -412,6 +406,9 @@ fi
 echo ""
 echo "=== Starting OpenSearch ==="
 echo ""
+
+touch /var/log/opensearch/axondb-search-cluster.log
+tail -f /var/log/opensearch/axondb-search-cluster.log &
 
 # Prepend "opensearch" command if no argument was provided or if the first
 # argument looks like a flag (i.e. starts with a dash).

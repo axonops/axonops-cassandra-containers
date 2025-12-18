@@ -746,7 +746,6 @@ curl http://localhost:8080/api/v1/healthz
 | `agentIngress.enabled` | Enable agent ingress | `false` |
 | `persistence.enabled` | Enable persistent storage | `true` |
 | `persistence.size` | Size of persistent volume | `1Gi` |
-| `replicaCount` | Number of replicas (should be 1) | `1` |
 
 ### Important Notes
 
@@ -830,7 +829,6 @@ curl http://localhost:8080/api/v1/healthz
 | podSecurityContext.runAsNonRoot | bool | `true` | Run as non-root |
 | podSecurityContext.runAsUser | int | `9988` | User ID to run pod |
 | readinessProbe | object | `{"failureThreshold":3,"httpGet":{"path":"/api/v1/healthz","port":"api"},"initialDelaySeconds":10,"periodSeconds":5,"timeoutSeconds":3}` | Readiness probe configuration |
-| replicaCount | int | `1` | Number of replicas |
 | resources | object | `{}` | Resource limits and requests |
 | searchDb.hosts | list | `[]` | Search database hosts |
 | searchDb.password | string | `""` | Search database password |
