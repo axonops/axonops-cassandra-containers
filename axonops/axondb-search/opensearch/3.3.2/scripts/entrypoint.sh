@@ -103,7 +103,6 @@ export OPENSEARCH_JAVA_OPTS="-Dopensearch.cgroups.hierarchy.override=/ $OPENSEAR
 export OPENSEARCH_CLUSTER_NAME="${OPENSEARCH_CLUSTER_NAME:-axonopsdb-search}"
 export OPENSEARCH_NODE_NAME="${OPENSEARCH_NODE_NAME:-${HOSTNAME}}"
 export OPENSEARCH_NETWORK_HOST="${OPENSEARCH_NETWORK_HOST:-0.0.0.0}"
-export OPENSEARCH_DISCOVERY_TYPE="${OPENSEARCH_DISCOVERY_TYPE:-single-node}"
 
 # TLS/SSL settings (default: enabled)
 # When false, disables HTTPS on REST API (useful when TLS terminated at load balancer)
@@ -157,11 +156,6 @@ if [ -n "$OPENSEARCH_NETWORK_HOST" ]; then
     _sed-in-place "/etc/opensearch/opensearch.yml" -r 's/^(# )?(network\.host:).*/\2 '"$OPENSEARCH_NETWORK_HOST"'/'
 fi
 
-# Apply discovery type
-if [ -n "$OPENSEARCH_DISCOVERY_TYPE" ]; then
-    _sed-in-place "/etc/opensearch/opensearch.yml" -r 's/^(# )?(discovery\.type:).*/\2 '"$OPENSEARCH_DISCOVERY_TYPE"'/'
-fi
-
 # Apply heap size override to jvm.options if env var set
 if [ -n "$OPENSEARCH_HEAP_SIZE" ]; then
     _sed-in-place "/etc/opensearch/jvm.options" -r 's/^-Xms[0-9]+[GgMm]$/-Xms'"$OPENSEARCH_HEAP_SIZE"'/'
@@ -187,6 +181,39 @@ fi
 if [ -n "$OPENSEARCH_SECURITY_ADMIN_DN" ]; then
     # Replace the admin_dn line (format: "  - \"DN_STRING\"")
     _sed-in-place "/etc/opensearch/opensearch.yml" -r 's|^  - ".*axondbsearch.*"|  - "'"$OPENSEARCH_SECURITY_ADMIN_DN"'"|'
+fi
+
+# Apply security nodes DN if env var set (for custom certificate scenarios)
+# Supports multiple DNs separated by semicolon (;)
+# Example: "CN=*.example.svc.cluster.local;CN=node-1;CN=node-2"
+if [ -n "$OPENSEARCH_SECURITY_NODES_DN" ]; then
+    echo "Configuring nodes_dn from OPENSEARCH_SECURITY_NODES_DN..."
+
+    # Remove existing nodes_dn section (from the key line to the last list item)
+    _sed-in-place "/etc/opensearch/opensearch.yml" '/^plugins\.security\.nodes_dn:/,/^  - ".*"$/d'
+
+    # Build the nodes_dn section from the environment variable
+    NODES_DN_SECTION="plugins.security.nodes_dn:"
+
+    # Split by semicolon and build YAML list
+    IFS=';' read -ra DN_ARRAY <<< "$OPENSEARCH_SECURITY_NODES_DN"
+    for dn in "${DN_ARRAY[@]}"; do
+        # Trim whitespace
+        dn=$(echo "$dn" | xargs)
+        if [ -n "$dn" ]; then
+            NODES_DN_SECTION="${NODES_DN_SECTION}\n  - \"${dn}\""
+        fi
+    done
+
+    # Insert the new nodes_dn section after admin_dn
+    _sed-in-place "/etc/opensearch/opensearch.yml" "/^plugins\.security\.authcz\.admin_dn:/,/^  - \".*\"$/ {
+        /^  - \".*\"$/ a\\
+\\
+# Node certificates (configured via OPENSEARCH_SECURITY_NODES_DN)\\
+${NODES_DN_SECTION}
+    }"
+
+    echo "  ✓ Configured $(echo "${DN_ARRAY[@]}" | wc -w) node DN(s)"
 fi
 
 # Disable HTTP SSL if AXONOPS_SEARCH_TLS_ENABLED=false
