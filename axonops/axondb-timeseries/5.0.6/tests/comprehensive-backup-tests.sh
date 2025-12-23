@@ -203,6 +203,9 @@ echo ""
 
 run_test
 
+# Clean backup volume for test isolation (sudo for cassandra-owned files)
+sudo rm -rf "$BACKUP_VOLUME"/* 2>/dev/null || echo "  Note: Some old backups may remain"
+
 # Start container for retention test (disable init scripts for test predictability)
 podman run -d --name retention-test \
   -v "$BACKUP_VOLUME":/backup \
@@ -293,7 +296,11 @@ fi
 echo "Creating first backup..."
 podman exec hardlink-disabled-test sh -c 'BACKUP_USE_HARDLINKS=false /usr/local/bin/cassandra-backup.sh' >/dev/null 2>&1
 
-BACKUP_1=$(podman exec hardlink-disabled-test ls -1dt /backup/data_backup-* | head -1)
+BACKUP_1=$(ls -1dt "$BACKUP_VOLUME"/data_backup-* 2>/dev/null | head -1)
+if [ -z "$BACKUP_1" ]; then
+    fail_test "Hardlink disabled test" "First backup was not created"
+    exit 1
+fi
 echo "First backup: $(basename $BACKUP_1)"
 
 sleep 5
@@ -302,11 +309,16 @@ sleep 5
 echo "Creating second backup with hardlinks disabled..."
 podman exec hardlink-disabled-test sh -c 'BACKUP_USE_HARDLINKS=false /usr/local/bin/cassandra-backup.sh' >/dev/null 2>&1
 
-BACKUP_2=$(podman exec hardlink-disabled-test ls -1dt /backup/data_backup-* | head -1)
+BACKUP_2=$(ls -1dt "$BACKUP_VOLUME"/data_backup-* 2>/dev/null | head -1)
+if [ -z "$BACKUP_2" ]; then
+    fail_test "Hardlink disabled test" "Second backup was not created"
+    exit 1
+fi
 echo "Second backup: $(basename $BACKUP_2)"
 
 # Verify NO hardlinks (all files should have Links: 1)
-HARDLINKED_COUNT=$(podman exec hardlink-disabled-test find "$BACKUP_2" -type f -links +1 2>/dev/null | wc -l)
+# Check from HOST filesystem (more reliable than podman exec)
+HARDLINKED_COUNT=$(find "$BACKUP_2" -type f -links +1 2>/dev/null | wc -l)
 
 if [ "$HARDLINKED_COUNT" -eq 0 ]; then
     pass_test "rsync full copy mode (no hardlinks, all files independent)"
@@ -354,39 +366,45 @@ for i in {1..3}; do
     sleep 5
 done
 
-# Get backup names (oldest to newest)
-BACKUP_1=$(podman exec hardlink-chain-test ls -1t /backup/data_backup-* | tail -1)
-BACKUP_2=$(podman exec hardlink-chain-test ls -1t /backup/data_backup-* | head -2 | tail -1)
-BACKUP_3=$(podman exec hardlink-chain-test ls -1t /backup/data_backup-* | head -1)
+# Get backup names from HOST volume (oldest to newest) - directories only
+BACKUP_1=$(find "$BACKUP_VOLUME" -maxdepth 1 -type d -name "data_backup-*" -printf '%T@ %p\n' 2>/dev/null | sort -n | head -1 | cut -d' ' -f2)
+BACKUP_2=$(find "$BACKUP_VOLUME" -maxdepth 1 -type d -name "data_backup-*" -printf '%T@ %p\n' 2>/dev/null | sort -n | head -2 | tail -1 | cut -d' ' -f2)
+BACKUP_3=$(find "$BACKUP_VOLUME" -maxdepth 1 -type d -name "data_backup-*" -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2)
+
+if [ -z "$BACKUP_1" ] || [ -z "$BACKUP_2" ] || [ -z "$BACKUP_3" ]; then
+    fail_test "Hardlink chain test" "Failed to create backup chain"
+    exit 1
+fi
 
 echo "Backup 1 (oldest): $(basename $BACKUP_1)"
 echo "Backup 2 (middle): $(basename $BACKUP_2)"
 echo "Backup 3 (newest): $(basename $BACKUP_3)"
 
 # Pick a file from backup-2 that should be hardlinked
-TEST_FILE=$(podman exec hardlink-chain-test find "$BACKUP_2" -type f -name "*.db" -links +1 2>/dev/null | head -1)
+# Access from HOST filesystem
+TEST_FILE=$(find "$BACKUP_2" -type f -name "*.db" -links +1 2>/dev/null | head -1)
 
 if [ -z "$TEST_FILE" ]; then
     fail_test "Hardlink chain test" "No hardlinked files found in backup-2"
 else
     echo "Test file: $TEST_FILE"
 
-    # Get inode and link count before deletion
-    INODE_BEFORE=$(podman exec hardlink-chain-test stat "$TEST_FILE" | grep Inode | awk '{print $3}')
-    LINKS_BEFORE=$(podman exec hardlink-chain-test stat "$TEST_FILE" | grep "Links:" | awk '{print $2}')
+    # Get inode and link count before deletion (from HOST)
+    INODE_BEFORE=$(stat "$TEST_FILE" | grep Inode | awk '{print $4}' | tr -d ',')
+    LINKS_BEFORE=$(stat "$TEST_FILE" | grep Links | awk '{print $2}')
 
     echo "Before deletion:"
     echo "  Inode: $INODE_BEFORE"
     echo "  Links: $LINKS_BEFORE"
 
-    # Delete backup-1 (oldest)
+    # Delete backup-1 (oldest) from HOST
     echo "Deleting oldest backup: $(basename $BACKUP_1)"
-    podman exec hardlink-chain-test rm -rf "$BACKUP_1" 2>&1 | head -5
+    sudo rm -rf "$BACKUP_1" 2>&1 | head -5
 
     # Verify file in backup-2 still exists with same inode
-    if podman exec hardlink-chain-test test -f "$TEST_FILE"; then
-        INODE_AFTER=$(podman exec hardlink-chain-test stat "$TEST_FILE" | grep Inode | awk '{print $3}')
-        LINKS_AFTER=$(podman exec hardlink-chain-test stat "$TEST_FILE" | grep "Links:" | awk '{print $2}')
+    if [ -f "$TEST_FILE" ]; then
+        INODE_AFTER=$(stat "$TEST_FILE" | grep Inode | awk '{print $4}' | tr -d ',')
+        LINKS_AFTER=$(stat "$TEST_FILE" | grep Links | awk '{print $2}')
 
         echo "After deletion:"
         echo "  Inode: $INODE_AFTER"
