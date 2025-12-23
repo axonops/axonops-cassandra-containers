@@ -666,26 +666,61 @@ fi
 
 log "Applying retention policy (keeping last ${BACKUP_RETENTION_HOURS} hours)..."
 
-# Convert hours to minutes for find -mmin
-RETENTION_MINUTES=$((BACKUP_RETENTION_HOURS * 60))
+# Calculate cutoff time in epoch seconds
+# Backups older than this will be deleted
+RETENTION_SECONDS=$((BACKUP_RETENTION_HOURS * 3600))
+CURRENT_TIME=$(date +%s)
+CUTOFF_TIME=$((CURRENT_TIME - RETENTION_SECONDS))
 
-# Find and delete backups older than retention period (using -mmin for minutes)
-OLD_BACKUPS=$(find "$BACKUP_VOLUME" -maxdepth 1 -type d -name "data_${BACKUP_TAG_PREFIX}-*" -mmin +${RETENTION_MINUTES} 2>/dev/null || true)
+log "Current time: $(date -u -d @${CURRENT_TIME} +"%Y-%m-%d %H:%M:%S UTC")"
+log "Cutoff time: $(date -u -d @${CUTOFF_TIME} +"%Y-%m-%d %H:%M:%S UTC")"
 
-if [ -n "$OLD_BACKUPS" ]; then
-    OLD_COUNT=$(echo "$OLD_BACKUPS" | wc -l)
-    log "Found $OLD_COUNT old backup(s) to delete:"
+# Find all backup directories
+ALL_BACKUPS=$(find "$BACKUP_VOLUME" -maxdepth 1 -type d -name "data_${BACKUP_TAG_PREFIX}-*" 2>/dev/null | sort || true)
 
-    while IFS= read -r old_backup; do
-        log "  Deleting: $(basename "$old_backup")"
-        rm -rf "$old_backup" || {
-            log "WARNING: Failed to delete old backup: $old_backup"
-        }
-    done <<< "$OLD_BACKUPS"
-
-    log "✓ Old backups deleted"
+if [ -z "$ALL_BACKUPS" ]; then
+    log "No backups found to check for retention"
 else
-    log "No old backups to delete"
+    DELETED_COUNT=0
+
+    while IFS= read -r backup_dir; do
+        backup_name=$(basename "$backup_dir")
+
+        # Extract timestamp from backup name: data_backup-20251223-110859 → 20251223-110859
+        timestamp=$(echo "$backup_name" | sed "s/^data_${BACKUP_TAG_PREFIX}-//")
+
+        # Convert timestamp to epoch seconds: 20251223-110859 → "20251223 110859" → epoch
+        # Format: YYYYMMDD-HHMMSS → YYYY-MM-DD HH:MM:SS
+        year=${timestamp:0:4}
+        month=${timestamp:4:2}
+        day=${timestamp:6:2}
+        hour=${timestamp:9:2}
+        minute=${timestamp:11:2}
+        second=${timestamp:13:2}
+
+        backup_datetime="${year}-${month}-${day} ${hour}:${minute}:${second}"
+        backup_epoch=$(date -u -d "$backup_datetime" +%s 2>/dev/null || echo "0")
+
+        if [ "$backup_epoch" -eq 0 ]; then
+            log "WARNING: Failed to parse timestamp for: $backup_name (skipping)"
+            continue
+        fi
+
+        # Check if backup is older than cutoff
+        if [ "$backup_epoch" -lt "$CUTOFF_TIME" ]; then
+            log "  Deleting old backup: $backup_name (age: $(((CURRENT_TIME - backup_epoch) / 3600))h)"
+            rm -rf "$backup_dir" || {
+                log "WARNING: Failed to delete old backup: $backup_dir"
+            }
+            DELETED_COUNT=$((DELETED_COUNT + 1))
+        fi
+    done <<< "$ALL_BACKUPS"
+
+    if [ "$DELETED_COUNT" -gt 0 ]; then
+        log "✓ Deleted $DELETED_COUNT old backup(s)"
+    else
+        log "No old backups to delete (all within retention period)"
+    fi
 fi
 
 # ============================================================================

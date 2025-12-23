@@ -217,35 +217,42 @@ if ! wait_for_cassandra "retention-test"; then
     exit 1
 fi
 
-# Create 5 backups
-echo "Creating 5 backups..."
-for i in {1..5}; do
+# Create 3 old backups with timestamps in names (simulating backups from 4 hours ago)
+echo "Creating 3 old backups with historical timestamps..."
+OLD_TIMESTAMP=$(date -u -d "4 hours ago" +%Y%m%d-%H%M%S)
+for i in 1 2 3; do
+    # Decrement timestamp by 10 seconds for each backup
+    offset=$((i * 10))
+    old_time=$(date -u -d "4 hours ago + $offset seconds" +%Y%m%d-%H%M%S)
+    old_backup="${BACKUP_VOLUME}/data_backup-${old_time}"
+
+    echo "  Creating old backup: backup-${old_time}"
+    mkdir -p "$old_backup"
+    echo "Simulated old backup from test" > "$old_backup/README.txt"
+done
+
+# Create 2 recent backups (real backups)
+echo "Creating 2 recent backups (actual backups)..."
+for i in 1 2; do
     podman exec retention-test /usr/local/bin/cassandra-backup.sh >/dev/null 2>&1
-    echo "  Backup $i created"
+    echo "  Recent backup $i created"
     sleep 5
 done
 
-INITIAL_COUNT=$(ls -1d "$BACKUP_VOLUME"/data_backup-* | wc -l)
-echo "Initial backup count: $INITIAL_COUNT"
+INITIAL_COUNT=$(ls -1d "$BACKUP_VOLUME"/data_backup-* 2>/dev/null | wc -l)
+echo "Initial backup count: $INITIAL_COUNT (3 old + 2 recent)"
 
-# Manually age first 3 backups (make them 3 hours old)
-echo "Manually aging first 3 backups (3 hours old)..."
-for backup in $(ls -1dt "$BACKUP_VOLUME"/data_backup-* | tail -3); do
-    echo "  Aging: $(basename $backup)"
-    sudo touch -d "3 hours ago" "$backup"
-done
-
-# Trigger backup with BACKUP_RETENTION_HOURS=2 (should delete aged backups)
+# Trigger backup with BACKUP_RETENTION_HOURS=2 (should delete 3 old backups based on NAME timestamps)
 echo "Running backup with BACKUP_RETENTION_HOURS=2..."
 podman exec retention-test sh -c 'BACKUP_RETENTION_HOURS=2 /usr/local/bin/cassandra-backup.sh' >/dev/null 2>&1
 
 # Count remaining backups
-REMAINING_COUNT=$(ls -1d "$BACKUP_VOLUME"/data_backup-* | wc -l)
+REMAINING_COUNT=$(ls -1d "$BACKUP_VOLUME"/data_backup-* 2>/dev/null | wc -l)
 echo "Remaining backups: $REMAINING_COUNT"
 
-# Should have: 2 new backups + 1 just created = 3 total (3 aged ones deleted)
+# Should have: 2 recent + 1 just created = 3 total (3 old ones deleted based on NAME timestamps)
 if [ "$REMAINING_COUNT" -eq 3 ]; then
-    pass_test "Retention policy deletes old backups (5 → 3 after deleting aged backups)"
+    pass_test "Retention policy deletes old backups based on name timestamps (5 → 3)"
 else
     fail_test "Retention policy" "Expected 3 backups, got $REMAINING_COUNT"
 fi
