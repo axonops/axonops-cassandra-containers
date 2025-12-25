@@ -73,6 +73,35 @@ print_startup_banner() {
     fi
     echo ""
 
+    # Backup/Restore Configuration (show if configured)
+    if [ -n "${BACKUP_SCHEDULE:-}" ] || [ -n "${RESTORE_FROM_BACKUP:-}" ] || [ "${RESTORE_ENABLED:-false}" = "true" ]; then
+      echo "Backup/Restore Configuration:"
+
+      # Scheduled backups
+      if [ -n "${BACKUP_SCHEDULE:-}" ]; then
+        echo "  Scheduled Backups:  Enabled"
+        echo "    Schedule:         ${BACKUP_SCHEDULE}"
+        echo "    Retention:        ${BACKUP_RETENTION_HOURS:-not set} hours"
+        echo "    Min Keep Count:   ${BACKUP_MINIMUM_RETENTION_COUNT:-1}"
+        echo "    Hardlinks:        ${BACKUP_USE_HARDLINKS:-true}"
+        echo "    Calculate Stats:  ${BACKUP_CALCULATE_STATS:-false}"
+      else
+        echo "  Scheduled Backups:  Disabled (trigger manually via /usr/local/bin/cassandra-backup.sh)"
+      fi
+
+      # Restore configuration
+      if [ -n "${RESTORE_FROM_BACKUP:-}" ]; then
+        echo "  Restore:            Enabled (specific backup)"
+        echo "    Target:           ${RESTORE_FROM_BACKUP}"
+      elif [ "${RESTORE_ENABLED:-false}" = "true" ]; then
+        echo "  Restore:            Enabled (latest backup)"
+      else
+        echo "  Restore:            Disabled"
+      fi
+
+      echo ""
+    fi
+
     echo "================================================================================"
     echo "Starting Cassandra..."
     echo "================================================================================"

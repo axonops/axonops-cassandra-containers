@@ -93,6 +93,13 @@ RESTORE_ENABLED="${RESTORE_ENABLED:-false}"
 BACKUP_VOLUME="${BACKUP_VOLUME:-/backup}"
 BACKUP_TAG_PREFIX="${BACKUP_TAG_PREFIX:-backup}"
 
+# Support "latest" keyword in RESTORE_FROM_BACKUP
+if [ "$RESTORE_FROM_BACKUP" = "latest" ]; then
+    log "RESTORE_FROM_BACKUP='latest' detected, will restore most recent backup"
+    RESTORE_ENABLED=true
+    RESTORE_FROM_BACKUP=""
+fi
+
 # rsync configuration (NEW in v1.1)
 RESTORE_RSYNC_RETRIES="${RESTORE_RSYNC_RETRIES:-3}"
 RESTORE_RSYNC_TIMEOUT_MINUTES="${RESTORE_RSYNC_TIMEOUT_MINUTES:-120}"
