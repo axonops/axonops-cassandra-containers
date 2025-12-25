@@ -305,6 +305,16 @@ echo "Initial backup count: $INITIAL_COUNT (3 old + 2 recent)"
 echo "Running backup with BACKUP_RETENTION_HOURS=2..."
 podman exec retention-test sh -c 'BACKUP_RETENTION_HOURS=2 /usr/local/bin/cassandra-backup.sh' >/dev/null 2>&1
 
+# Wait for async retention cleanup to complete (it runs in background)
+echo "Waiting for async retention cleanup to complete..."
+sleep 10  # Give async deletion time to finish
+
+# Verify cleanup semaphore if it exists
+if podman exec retention-test test -f /tmp/axonops-retention-cleanup.lock 2>/dev/null; then
+    echo "  Cleanup still running, waiting..."
+    sleep 20
+fi
+
 # Count remaining backups
 REMAINING_COUNT=$(ls -1d "$BACKUP_VOLUME"/data_backup-* 2>/dev/null | wc -l)
 echo "Remaining backups: $REMAINING_COUNT"

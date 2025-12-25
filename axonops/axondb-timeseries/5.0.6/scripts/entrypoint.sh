@@ -341,9 +341,10 @@ if [ -n "${BACKUP_SCHEDULE:-}" ]; then
         echo "    BACKUP_RETENTION_HOURS=168     # Keep 7 days"
         echo "    BACKUP_RETENTION_HOURS=720     # Keep 30 days"
         echo ""
-        echo "CRITICAL: Cannot start backups without retention policy"
-        echo "Container startup will continue, but backups are DISABLED"
+        echo "CRITICAL: This is an invalid configuration"
+        echo "Container cannot start with backup schedule but no retention policy"
         echo ""
+        exit 1
     else
         echo "Retention: ${BACKUP_RETENTION_HOURS} hours"
         echo ""
