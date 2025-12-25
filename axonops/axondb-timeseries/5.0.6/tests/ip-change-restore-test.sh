@@ -28,12 +28,16 @@ echo "" >> "$TEST_RESULTS"
 sudo rm -rf "$BACKUP_VOLUME"/* 2>/dev/null || true
 podman rm -f ip-test-source ip-test-restore 2>/dev/null || true
 
-echo "STEP 1: Create backup from container"
+# Create network to control IPs (force different addresses)
+podman network rm ip-test-net 2>/dev/null || true
+podman network create ip-test-net --subnet 172.30.0.0/24 >/dev/null 2>&1
+
+echo "STEP 1: Create backup from container with IP 172.30.0.100"
 echo "========================================================================"
 echo ""
 
-# Note: Podman assigns IPs automatically, we'll just verify they're different
 podman run -d --name ip-test-source \
+  --network ip-test-net --ip 172.30.0.100 \
   -v "$BACKUP_VOLUME":/backup \
   -e CASSANDRA_CLUSTER_NAME=test-ip-change \
   -e CASSANDRA_DC=dc1 \
@@ -79,8 +83,9 @@ echo "STEP 2: Restore to NEW container (likely different IP)"
 echo "========================================================================"
 echo ""
 
-# Create restore container (will get different IP)
+# Create restore container with DIFFERENT IP (172.30.0.200 instead of .100)
 podman run -d --name ip-test-restore \
+  --network ip-test-net --ip 172.30.0.200 \
   -v "$BACKUP_VOLUME":/backup \
   -e CASSANDRA_CLUSTER_NAME=test-ip-change \
   -e CASSANDRA_DC=dc1 \
@@ -107,10 +112,12 @@ echo "" | tee -a "$TEST_RESULTS"
 # Compare IPs
 if [ "$SOURCE_IP" != "$RESTORE_IP" ]; then
     echo "✓ IP CHANGED: $SOURCE_IP → $RESTORE_IP" | tee -a "$TEST_RESULTS"
+    echo "  This validates IP change handling!" | tee -a "$TEST_RESULTS"
     IP_CHANGED=true
 else
-    echo "⚠ IP SAME: $RESTORE_IP (test may be inconclusive)" | tee -a "$TEST_RESULTS"
-    IP_CHANGED=false
+    echo "✗ FAIL: IP did not change ($RESTORE_IP)" | tee -a "$TEST_RESULTS"
+    echo "  Test setup error - should have forced different IPs" | tee -a "$TEST_RESULTS"
+    exit 1
 fi
 
 echo "" | tee -a "$TEST_RESULTS"
@@ -169,5 +176,6 @@ echo "[0;32m✓ PASS: IP address change handled correctly by Cassandra[0m" | tee
 
 # Cleanup
 podman rm -f ip-test-restore >/dev/null 2>&1
+podman network rm ip-test-net >/dev/null 2>&1
 
 exit 0
