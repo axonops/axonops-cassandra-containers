@@ -173,6 +173,8 @@ BACKUP_TAG_PREFIX="${BACKUP_TAG_PREFIX:-backup}"
 BACKUP_RETENTION_HOURS="${BACKUP_RETENTION_HOURS:-168}"  # Default: 7 days
 BACKUP_MINIMUM_RETENTION_COUNT="${BACKUP_MINIMUM_RETENTION_COUNT:-1}"  # Always keep at least N previous backups (safety)
 BACKUP_USE_HARDLINKS="${BACKUP_USE_HARDLINKS:-true}"
+BACKUP_CALCULATE_STATS="${BACKUP_CALCULATE_STATS:-false}"  # Default: false (expensive on large datasets)
+CLEANUP_TIMEOUT_MINUTES="${RETENTION_CLEANUP_TIMEOUT_MINUTES:-60}"  # Timeout for async retention deletion
 
 # rsync configuration
 BACKUP_RSYNC_RETRIES="${BACKUP_RSYNC_RETRIES:-3}"
@@ -189,6 +191,7 @@ log "  Tag Prefix: ${BACKUP_TAG_PREFIX}"
 log "  Retention Hours: ${BACKUP_RETENTION_HOURS}"
 log "  Minimum Retention Count: ${BACKUP_MINIMUM_RETENTION_COUNT} (always keep at least this many previous backups)"
 log "  Use Hardlinks: ${BACKUP_USE_HARDLINKS}"
+log "  Calculate Stats: ${BACKUP_CALCULATE_STATS} (expensive on large datasets, default: false)"
 log "  Data Directory: ${CASSANDRA_DATA_DIR}"
 log "  rsync Retries: ${BACKUP_RSYNC_RETRIES}"
 log "  rsync Timeout: ${BACKUP_RSYNC_TIMEOUT_MINUTES} minutes"
@@ -651,17 +654,33 @@ log "Calculating backup statistics..."
 # Total size of backup (in human-readable format)
 BACKUP_SIZE=$(du -sh "$BACKUP_DIR" 2>/dev/null | cut -f1 || echo "unknown")
 
-# If using hardlinks, calculate actual disk usage
-if [ "$BACKUP_USE_HARDLINKS" = "true" ] && [ -n "$LATEST_BACKUP" ]; then
-    # Count hardlinks (files with link count > 1)
-    HARDLINKED_FILES=$(find "$BACKUP_DIR" -type f -links +1 2>/dev/null | wc -l || echo "0")
-    log "Backup statistics:"
-    log "  Total size: ${BACKUP_SIZE}"
-    log "  Files hardlinked: ${HARDLINKED_FILES} (deduplicated from previous backup)"
+# Calculate detailed stats only if enabled (expensive on large datasets)
+if [ "$BACKUP_CALCULATE_STATS" = "true" ]; then
+    log "Detailed stats calculation enabled (may be slow on large datasets)..."
+    STATS_START=$(date +%s)
+
+    if [ "$BACKUP_USE_HARDLINKS" = "true" ] && [ -n "$LATEST_BACKUP" ]; then
+        # Count hardlinks (files with link count > 1) - EXPENSIVE!
+        HARDLINKED_FILES=$(find "$BACKUP_DIR" -type f -links +1 2>/dev/null | wc -l || echo "0")
+        STATS_DURATION=$(get_duration $STATS_START)
+
+        log "Backup statistics (calculated in ${STATS_DURATION}):"
+        log "  Total size: ${BACKUP_SIZE}"
+        log "  Files hardlinked: ${HARDLINKED_FILES} (deduplicated from previous backup)"
+    else
+        log "Backup statistics:"
+        log "  Total size: ${BACKUP_SIZE}"
+        log "  Full backup (no deduplication)"
+    fi
 else
-    log "Backup statistics:"
+    # Fast stats only (no expensive find operation)
+    log "Backup statistics (fast mode, detailed stats disabled):"
     log "  Total size: ${BACKUP_SIZE}"
-    log "  Full backup (no deduplication)"
+    if [ "$BACKUP_USE_HARDLINKS" = "true" ] && [ -n "$LATEST_BACKUP" ]; then
+        log "  Hardlink deduplication: enabled (set BACKUP_CALCULATE_STATS=true for file count)"
+    else
+        log "  Hardlink deduplication: disabled"
+    fi
 fi
 
 # ============================================================================
@@ -671,85 +690,113 @@ fi
 log "Applying retention policy (keeping last ${BACKUP_RETENTION_HOURS} hours)..."
 log "Minimum retention count: ${BACKUP_MINIMUM_RETENTION_COUNT} (safety net - always keep this many previous backups)"
 
-# Calculate cutoff time in epoch seconds
-RETENTION_SECONDS=$((BACKUP_RETENTION_HOURS * 3600))
-CURRENT_TIME=$(date +%s)
-CUTOFF_TIME=$((CURRENT_TIME - RETENTION_SECONDS))
+# Check if retention cleanup already running
+CLEANUP_SEMAPHORE="/tmp/axonops-retention-cleanup.lock"
+if [ -f "$CLEANUP_SEMAPHORE" ]; then
+    CLEANUP_STATE=$(grep "^STATE=" "$CLEANUP_SEMAPHORE" 2>/dev/null | cut -d'=' -f2 || echo "unknown")
+    CLEANUP_PID=$(grep "^PID=" "$CLEANUP_SEMAPHORE" 2>/dev/null | cut -d'=' -f2 || echo "")
 
-log "Current time: $(date -u -d @${CURRENT_TIME} +"%Y-%m-%d %H:%M:%S UTC")"
-log "Cutoff time: $(date -u -d @${CUTOFF_TIME} +"%Y-%m-%d %H:%M:%S UTC")"
-
-# Find all EXISTING backup directories (excludes current backup being created)
-ALL_BACKUPS=$(find "$BACKUP_VOLUME" -maxdepth 1 -type d -name "data_${BACKUP_TAG_PREFIX}-*" 2>/dev/null | sort || true)
-
-if [ -z "$ALL_BACKUPS" ]; then
-    log "No existing backups found (this appears to be the first backup)"
-else
-    TOTAL_BACKUPS=$(echo "$ALL_BACKUPS" | wc -l)
-    log "Found ${TOTAL_BACKUPS} existing backup(s) (excludes current backup being created)"
-
-    # Safety check: Always keep at least MINIMUM_RETENTION_COUNT previous backups
-    # The "+1" accounts for the current backup being created
-    MINIMUM_KEEP=$((BACKUP_MINIMUM_RETENTION_COUNT + 1))
-
-    if [ "$TOTAL_BACKUPS" -le "$BACKUP_MINIMUM_RETENTION_COUNT" ]; then
-        log "Keeping all ${TOTAL_BACKUPS} backup(s) (minimum retention: ${BACKUP_MINIMUM_RETENTION_COUNT})"
-        log "No backups will be deleted (safety net active)"
+    if [ -n "$CLEANUP_PID" ] && kill -0 "$CLEANUP_PID" 2>/dev/null; then
+        log "Retention cleanup already in progress (PID $CLEANUP_PID, state: $CLEANUP_STATE)"
+        log "Skipping retention check (will retry on next backup)"
     else
-        log "Total backups (${TOTAL_BACKUPS}) > minimum retention (${BACKUP_MINIMUM_RETENTION_COUNT}) - checking for old backups"
+        log "Stale cleanup semaphore found (removing)"
+        rm -f "$CLEANUP_SEMAPHORE"
+    fi
+fi
 
-        # Build list of old backups with their ages
-        declare -a OLD_BACKUPS_ARRAY
-        DELETED_COUNT=0
+if [ ! -f "$CLEANUP_SEMAPHORE" ]; then
+    # Calculate cutoff time in epoch seconds
+    RETENTION_SECONDS=$((BACKUP_RETENTION_HOURS * 3600))
+    CURRENT_TIME=$(date +%s)
+    CUTOFF_TIME=$((CURRENT_TIME - RETENTION_SECONDS))
 
-        while IFS= read -r backup_dir; do
-            backup_name=$(basename "$backup_dir")
+    log "Current time: $(date -u -d @${CURRENT_TIME} +"%Y-%m-%d %H:%M:%S UTC")"
+    log "Cutoff time: $(date -u -d @${CUTOFF_TIME} +"%Y-%m-%d %H:%M:%S UTC")"
 
-            # Extract timestamp from backup name
-            timestamp=$(echo "$backup_name" | sed "s/^data_${BACKUP_TAG_PREFIX}-//")
+    # Find all EXISTING backup directories (excludes current backup being created)
+    ALL_BACKUPS=$(find "$BACKUP_VOLUME" -maxdepth 1 -type d -name "data_${BACKUP_TAG_PREFIX}-*" 2>/dev/null | sort || true)
 
-            # Convert to epoch
-            year=${timestamp:0:4}
-            month=${timestamp:4:2}
-            day=${timestamp:6:2}
-            hour=${timestamp:9:2}
-            minute=${timestamp:11:2}
-            second=${timestamp:13:2}
+    if [ -z "$ALL_BACKUPS" ]; then
+        log "No existing backups found (this appears to be the first backup)"
+    else
+        TOTAL_BACKUPS=$(echo "$ALL_BACKUPS" | wc -l)
+        log "Found ${TOTAL_BACKUPS} existing backup(s) (excludes current backup being created)"
 
-            backup_datetime="${year}-${month}-${day} ${hour}:${minute}:${second}"
-            backup_epoch=$(date -u -d "$backup_datetime" +%s 2>/dev/null || echo "0")
+        # Safety check: Always keep at least MINIMUM_RETENTION_COUNT previous backups
+        MINIMUM_KEEP=$((BACKUP_MINIMUM_RETENTION_COUNT + 1))
 
-            if [ "$backup_epoch" -eq 0 ]; then
-                log "WARNING: Failed to parse timestamp for: $backup_name (skipping)"
-                continue
-            fi
+        if [ "$TOTAL_BACKUPS" -le "$BACKUP_MINIMUM_RETENTION_COUNT" ]; then
+            log "Keeping all ${TOTAL_BACKUPS} backup(s) (minimum retention: ${BACKUP_MINIMUM_RETENTION_COUNT})"
+            log "No backups will be deleted (safety net active)"
+        else
+            log "Total backups (${TOTAL_BACKUPS}) > minimum retention (${BACKUP_MINIMUM_RETENTION_COUNT}) - checking for old backups"
 
-            # Check if backup is older than cutoff
-            if [ "$backup_epoch" -lt "$CUTOFF_TIME" ]; then
-                # Calculate how many backups will remain after this deletion
-                REMAINING_AFTER_DELETE=$((TOTAL_BACKUPS - DELETED_COUNT - 1))
+            # Build list of old backups to delete
+            OLD_BACKUPS_LIST=""
+            TO_DELETE_COUNT=0
 
-                # Safety check: Don't delete if it would violate minimum retention
-                # Remember: +1 for current backup being created
-                if [ "$REMAINING_AFTER_DELETE" -lt "$MINIMUM_KEEP" ]; then
-                    log "  Skipping: $backup_name (age: $(((CURRENT_TIME - backup_epoch) / 3600))h) - would violate minimum retention"
-                    log "    Remaining after delete would be: $REMAINING_AFTER_DELETE (minimum required: $MINIMUM_KEEP)"
+            while IFS= read -r backup_dir; do
+                backup_name=$(basename "$backup_dir")
+
+                # Extract timestamp from backup name
+                timestamp=$(echo "$backup_name" | sed "s/^data_${BACKUP_TAG_PREFIX}-//")
+
+                # Convert to epoch
+                year=${timestamp:0:4}
+                month=${timestamp:4:2}
+                day=${timestamp:6:2}
+                hour=${timestamp:9:2}
+                minute=${timestamp:11:2}
+                second=${timestamp:13:2}
+
+                backup_datetime="${year}-${month}-${day} ${hour}:${minute}:${second}"
+                backup_epoch=$(date -u -d "$backup_datetime" +%s 2>/dev/null || echo "0")
+
+                if [ "$backup_epoch" -eq 0 ]; then
+                    log "WARNING: Failed to parse timestamp for: $backup_name (skipping)"
                     continue
                 fi
 
-                log "  Deleting old backup: $backup_name (age: $(((CURRENT_TIME - backup_epoch) / 3600))h)"
-                rm -rf "$backup_dir" || {
-                    log "WARNING: Failed to delete old backup: $backup_dir"
-                }
-                DELETED_COUNT=$((DELETED_COUNT + 1))
-            fi
-        done <<< "$ALL_BACKUPS"
+                # Check if backup is older than cutoff
+                if [ "$backup_epoch" -lt "$CUTOFF_TIME" ]; then
+                    # Calculate how many backups will remain after this deletion
+                    REMAINING_AFTER_DELETE=$((TOTAL_BACKUPS - TO_DELETE_COUNT - 1))
 
-        if [ "$DELETED_COUNT" -gt 0 ]; then
-            log "✓ Deleted $DELETED_COUNT old backup(s)"
-            log "  Remaining: $((TOTAL_BACKUPS - DELETED_COUNT)) existing + 1 current = $((TOTAL_BACKUPS - DELETED_COUNT + 1)) total"
-        else
-            log "No old backups to delete (all within retention period or protected by minimum count)"
+                    # Safety check: Don't delete if it would violate minimum retention
+                    if [ "$REMAINING_AFTER_DELETE" -lt "$MINIMUM_KEEP" ]; then
+                        log "  Skipping: $backup_name (age: $(((CURRENT_TIME - backup_epoch) / 3600))h) - would violate minimum retention"
+                        log "    Remaining after delete would be: $REMAINING_AFTER_DELETE (minimum required: $MINIMUM_KEEP)"
+                        continue
+                    fi
+
+                    # Add to deletion list
+                    log "  Marked for deletion: $backup_name (age: $(((CURRENT_TIME - backup_epoch) / 3600))h)"
+                    if [ -z "$OLD_BACKUPS_LIST" ]; then
+                        OLD_BACKUPS_LIST="$backup_dir"
+                    else
+                        OLD_BACKUPS_LIST="$OLD_BACKUPS_LIST"$'\n'"$backup_dir"
+                    fi
+                    TO_DELETE_COUNT=$((TO_DELETE_COUNT + 1))
+                fi
+            done <<< "$ALL_BACKUPS"
+
+            if [ -n "$OLD_BACKUPS_LIST" ]; then
+                log "Starting async deletion of ${TO_DELETE_COUNT} old backup(s)..."
+                log "Deletion will run in background (timeout: ${CLEANUP_TIMEOUT_MINUTES} minutes)"
+                log "Backup script will complete immediately (check logs for deletion progress)"
+
+                # Export vars needed by deletion script
+                export RETENTION_CLEANUP_TIMEOUT_MINUTES="$CLEANUP_TIMEOUT_MINUTES"
+
+                # Start async cleanup (redirect output to log file)
+                echo "$OLD_BACKUPS_LIST" | /usr/local/bin/retention-cleanup.sh >> /var/log/cassandra/retention-cleanup.log 2>&1 &
+
+                log "✓ Async deletion started (PID $!)"
+                log "  Remaining: $((TOTAL_BACKUPS - TO_DELETE_COUNT)) existing + 1 current = $((TOTAL_BACKUPS - TO_DELETE_COUNT + 1)) total (after cleanup)"
+            else
+                log "No old backups to delete (all within retention period or protected by minimum count)"
+            fi
         fi
     fi
 fi

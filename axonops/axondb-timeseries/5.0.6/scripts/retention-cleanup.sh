@@ -1,0 +1,131 @@
+#!/bin/bash
+set -euo pipefail
+
+# ============================================================================
+# Retention Cleanup Script (Async)
+# Purpose: Delete old backups asynchronously with timeout and semaphore
+# ============================================================================
+# This script is spawned in background by cassandra-backup.sh
+# It allows backup to complete immediately while deletion happens async
+
+SCRIPT_VERSION="1.0.0"
+
+# Logging
+log() {
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [RETENTION] $*"
+}
+
+log_error() {
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [RETENTION] ERROR: $*" >&2
+}
+
+# Timing
+START_TIME=$(date +%s)
+get_duration() {
+    local start=$1
+    local end=$(date +%s)
+    local duration=$((end - start))
+    if [ $duration -ge 60 ]; then
+        echo "$((duration / 60))m $((duration % 60))s"
+    else
+        echo "${duration}s"
+    fi
+}
+
+log "Starting retention cleanup (version ${SCRIPT_VERSION})"
+
+# Semaphore for this cleanup process
+# CRITICAL: In /tmp (ephemeral) not .axonops (would be backed up!)
+CLEANUP_SEMAPHORE="/tmp/axonops-retention-cleanup.lock"
+CLEANUP_TIMEOUT_MINUTES="${RETENTION_CLEANUP_TIMEOUT_MINUTES:-60}"
+
+# Write semaphore
+write_semaphore() {
+    local state="$1"
+    local reason="${2:-}"
+
+    {
+        echo "STARTED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        echo "PID=$$"
+        echo "STATE=$state"
+        [ -n "$reason" ] && echo "REASON=$reason"
+    } > "$CLEANUP_SEMAPHORE"
+
+    log "Semaphore: STATE=$state${reason:+, REASON=$reason}"
+}
+
+# Trap to always update semaphore on exit
+cleanup_on_exit() {
+    local exit_code=$?
+    local duration=$(get_duration $START_TIME)
+
+    if [ $exit_code -eq 0 ]; then
+        write_semaphore "success" "cleanup_completed"
+        log "✓ Retention cleanup completed (took ${duration})"
+    elif [ $exit_code -eq 124 ]; then
+        write_semaphore "timeout" "exceeded_${CLEANUP_TIMEOUT_MINUTES}min"
+        log_error "Retention cleanup timed out after ${CLEANUP_TIMEOUT_MINUTES} minutes"
+    else
+        write_semaphore "error" "exit_code_${exit_code}"
+        log_error "Retention cleanup failed after ${duration} (exit code: $exit_code)"
+    fi
+
+    # Remove lock after updating state
+    rm -f "$CLEANUP_SEMAPHORE" 2>/dev/null || true
+}
+
+trap cleanup_on_exit EXIT
+
+# Write in_progress state
+write_semaphore "in_progress" "deleting_old_backups"
+
+# Read backup list from arguments or stdin
+if [ $# -gt 0 ]; then
+    # Backups passed as arguments
+    BACKUPS_TO_DELETE="$@"
+else
+    # Read from stdin
+    BACKUPS_TO_DELETE=$(cat)
+fi
+
+if [ -z "$BACKUPS_TO_DELETE" ]; then
+    log "No backups to delete"
+    exit 0
+fi
+
+# Count backups to delete
+DELETE_COUNT=$(echo "$BACKUPS_TO_DELETE" | wc -l)
+log "Deleting ${DELETE_COUNT} old backup(s)..."
+
+# Delete each backup with timeout wrapper
+DELETED=0
+FAILED=0
+
+# Timeout for entire cleanup operation
+timeout ${CLEANUP_TIMEOUT_MINUTES}m bash <<'CLEANUP_SCRIPT'
+while IFS= read -r backup_path; do
+    backup_name=$(basename "$backup_path")
+
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [RETENTION]   Deleting: $backup_name"
+
+    if rm -rf "$backup_path" 2>&1; then
+        echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [RETENTION]     ✓ Deleted: $backup_name"
+    else
+        echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [RETENTION]     ✗ Failed: $backup_name"
+    fi
+done
+CLEANUP_SCRIPT <<< "$BACKUPS_TO_DELETE"
+
+CLEANUP_EXIT=$?
+
+if [ $CLEANUP_EXIT -eq 124 ]; then
+    log_error "Cleanup timed out after ${CLEANUP_TIMEOUT_MINUTES} minutes"
+    log_error "Some backups may not have been deleted"
+    exit 124
+elif [ $CLEANUP_EXIT -ne 0 ]; then
+    log_error "Cleanup failed with exit code $CLEANUP_EXIT"
+    exit $CLEANUP_EXIT
+fi
+
+log "✓ All old backups deleted successfully"
+exit 0
