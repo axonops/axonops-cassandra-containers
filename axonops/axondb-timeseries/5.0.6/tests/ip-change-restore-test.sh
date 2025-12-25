@@ -1,181 +1,160 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+
+# Source common test utilities
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/test-common.sh"
+
+# Trap for cleanup
+trap cleanup_test_resources EXIT
 
 # ============================================================================
 # IP Address Change on Restore Test
-# Purpose: Verify Cassandra handles IP change when restoring from backup
 # ============================================================================
-# Question: If backup taken from IP 10.0.2.100, can it restore to IP 10.0.2.200?
-# Hypothesis: YES - Cassandra uses broadcast_address from config (overrides system.local)
 
 BACKUP_VOLUME=~/axondb-backup-testing/backup-volume
-TEST_RESULTS="ip-change-restore-results.txt"
+TEST_NETWORK="ip-test-net"
+SOURCE_IP="172.30.0.100"
+RESTORE_IP="172.30.0.200"
 
 echo "========================================================================"
 echo "IP Address Change on Restore Test"
 echo "========================================================================"
 echo ""
-echo "Results: $TEST_RESULTS"
-echo ""
 
-# Initialize results
-echo "IP Address Change on Restore Test Results" > "$TEST_RESULTS"
-echo "==========================================" >> "$TEST_RESULTS"
-echo "Date: $(date)" >> "$TEST_RESULTS"
-echo "" >> "$TEST_RESULTS"
-
-# Clean environment
+# Clean and setup
 sudo rm -rf "$BACKUP_VOLUME"/* 2>/dev/null || true
-podman rm -f ip-test-source ip-test-restore 2>/dev/null || true
 
-# Create network to control IPs (force different addresses)
-podman network rm ip-test-net 2>/dev/null || true
-podman network create ip-test-net --subnet 172.30.0.0/24 >/dev/null 2>&1
+# Create network (clean first)
+podman network rm "$TEST_NETWORK" 2>/dev/null || true
+podman network create "$TEST_NETWORK" --subnet 172.30.0.0/24 >/dev/null
+register_network "$TEST_NETWORK"
 
-echo "STEP 1: Create backup from container with IP 172.30.0.100"
-echo "========================================================================"
+echo "✓ Test network created (172.30.0.0/24)"
 echo ""
+
+# ============================================================================
+# Test: Backup from IP .100, Restore to IP .200
+# ============================================================================
+run_test
+
+echo "STEP 1: Create backup from IP $SOURCE_IP"
+echo "------------------------------------------------------------------------"
 
 podman run -d --name ip-test-source \
-  --network ip-test-net --ip 172.30.0.100 \
-  -v "$BACKUP_VOLUME":/backup \
-  -e CASSANDRA_CLUSTER_NAME=test-ip-change \
-  -e CASSANDRA_DC=dc1 \
-  -e CASSANDRA_HEAP_SIZE=4G \
-  -e INIT_SYSTEM_KEYSPACES_AND_ROLES=false \
-  localhost/axondb-timeseries:backup-complete >/dev/null
+    --network "$TEST_NETWORK" --ip "$SOURCE_IP" \
+    -v "$BACKUP_VOLUME":/backup \
+    -e CASSANDRA_CLUSTER_NAME=test-ip-change \
+    -e CASSANDRA_DC=dc1 \
+    -e CASSANDRA_HEAP_SIZE=4G \
+    -e INIT_SYSTEM_KEYSPACES_AND_ROLES=false \
+    localhost/axondb-timeseries:backup-complete >/dev/null
 
-echo "Waiting for Cassandra to start..."
-sleep 75
+register_container "ip-test-source"
 
-# Get source IP
-SOURCE_IP=$(podman exec ip-test-source nodetool status | grep "^UN" | awk '{print $2}')
-echo "Source container IP: $SOURCE_IP"
+if ! wait_for_cassandra_ready "ip-test-source"; then
+    fail_test "IP change test" "Source container failed to start"
+    exit 1
+fi
+
+# Verify source IP
+ACTUAL_SOURCE_IP=$(podman exec ip-test-source nodetool status | grep "^UN" | awk '{print $2}')
+echo "✓ Source container IP: $ACTUAL_SOURCE_IP"
+
+if [ "$ACTUAL_SOURCE_IP" != "$SOURCE_IP" ]; then
+    fail_test "IP change test" "Source IP mismatch (expected $SOURCE_IP, got $ACTUAL_SOURCE_IP)"
+    exit 1
+fi
 
 # Create test data
 echo "Creating test data..."
 podman exec ip-test-source cqlsh -u cassandra -p cassandra -e "CREATE KEYSPACE ip_test WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 1};" >/dev/null 2>&1
-podman exec ip-test-source cqlsh -u cassandra -p cassandra -e "CREATE TABLE ip_test.data (id INT PRIMARY KEY, ip TEXT);" >/dev/null 2>&1
-podman exec ip-test-source cqlsh -u cassandra -p cassandra -e "INSERT INTO ip_test.data (id, ip) VALUES (1, '$SOURCE_IP');" >/dev/null 2>&1
-
-# Verify data
-ROW_COUNT=$(podman exec ip-test-source cqlsh -u cassandra -p cassandra -e "SELECT COUNT(*) FROM ip_test.data;" 2>&1 | grep -A2 "count" | tail -1 | tr -d ' ')
-echo "✓ Test data created (1 row with source IP: $SOURCE_IP)"
+podman exec ip-test-source cqlsh -u cassandra -p cassandra -e "CREATE TABLE ip_test.data (id INT PRIMARY KEY, source_ip TEXT);" >/dev/null 2>&1
+podman exec ip-test-source cqlsh -u cassandra -p cassandra -e "INSERT INTO ip_test.data (id, source_ip) VALUES (1, '$ACTUAL_SOURCE_IP');" >/dev/null 2>&1
+echo "✓ Test data created"
 
 # Create backup
 echo "Creating backup..."
 podman exec ip-test-source /usr/local/bin/cassandra-backup.sh >/dev/null 2>&1
 
 BACKUP_NAME=$(ls -1dt "$BACKUP_VOLUME"/data_backup-* 2>/dev/null | head -1 | xargs basename | sed 's/^data_//')
+if [ -z "$BACKUP_NAME" ]; then
+    fail_test "IP change test" "Backup not created"
+    exit 1
+fi
 echo "✓ Backup created: $BACKUP_NAME"
 
-# Check system.local IP in backup
-BACKED_UP_IP=$(podman exec ip-test-source cqlsh -u cassandra -p cassandra -e "SELECT broadcast_address FROM system.local;" 2>&1 | grep -v "Warning" | grep -A2 "broadcast_address" | tail -1 | tr -d ' ')
-echo "  IP stored in system.local: $BACKED_UP_IP"
-
-# Destroy source container
-echo "Destroying source container..."
-podman stop ip-test-source >/dev/null 2>&1
-podman rm ip-test-source >/dev/null 2>&1
-
-echo ""
-echo "STEP 2: Restore to NEW container (likely different IP)"
-echo "========================================================================"
+# Destroy source
+podman rm -f ip-test-source >/dev/null 2>&1
+echo "✓ Source container destroyed"
 echo ""
 
-# Create restore container with DIFFERENT IP (172.30.0.200 instead of .100)
+echo "STEP 2: Restore to DIFFERENT IP $RESTORE_IP"
+echo "------------------------------------------------------------------------"
+
 podman run -d --name ip-test-restore \
-  --network ip-test-net --ip 172.30.0.200 \
-  -v "$BACKUP_VOLUME":/backup \
-  -e CASSANDRA_CLUSTER_NAME=test-ip-change \
-  -e CASSANDRA_DC=dc1 \
-  -e CASSANDRA_HEAP_SIZE=4G \
-  -e RESTORE_FROM_BACKUP="$BACKUP_NAME" \
-  localhost/axondb-timeseries:backup-complete >/dev/null 2>&1
+    --network "$TEST_NETWORK" --ip "$RESTORE_IP" \
+    -v "$BACKUP_VOLUME":/backup \
+    -e CASSANDRA_CLUSTER_NAME=test-ip-change \
+    -e CASSANDRA_DC=dc1 \
+    -e CASSANDRA_HEAP_SIZE=4G \
+    -e RESTORE_FROM_BACKUP="$BACKUP_NAME" \
+    localhost/axondb-timeseries:backup-complete >/dev/null 2>&1
 
-echo "Waiting for restore and Cassandra startup..."
-sleep 45
+register_container "ip-test-restore"
 
-# Get restore container IP
-RESTORE_IP=$(podman exec ip-test-restore nodetool status 2>/dev/null | grep "^UN" | awk '{print $2}' || echo "NOT_STARTED")
-
-if [ "$RESTORE_IP" = "NOT_STARTED" ]; then
-    echo "✗ FAIL: Cassandra did not start" | tee -a "$TEST_RESULTS"
-    echo "Check logs:" | tee -a "$TEST_RESULTS"
-    podman logs ip-test-restore 2>&1 | tail -30 | tee -a "$TEST_RESULTS"
+if ! wait_for_cassandra_ready "ip-test-restore"; then
+    fail_test "IP change test" "Restore container failed to start"
+    podman logs ip-test-restore 2>&1 | tail -30
     exit 1
 fi
 
-echo "Restore container IP: $RESTORE_IP" | tee -a "$TEST_RESULTS"
-echo "" | tee -a "$TEST_RESULTS"
+# Verify restore IP
+ACTUAL_RESTORE_IP=$(podman exec ip-test-restore nodetool status | grep "^UN" | awk '{print $2}')
+echo "✓ Restore container IP: $ACTUAL_RESTORE_IP"
 
-# Compare IPs
-if [ "$SOURCE_IP" != "$RESTORE_IP" ]; then
-    echo "✓ IP CHANGED: $SOURCE_IP → $RESTORE_IP" | tee -a "$TEST_RESULTS"
-    echo "  This validates IP change handling!" | tee -a "$TEST_RESULTS"
-    IP_CHANGED=true
-else
-    echo "✗ FAIL: IP did not change ($RESTORE_IP)" | tee -a "$TEST_RESULTS"
-    echo "  Test setup error - should have forced different IPs" | tee -a "$TEST_RESULTS"
+if [ "$ACTUAL_RESTORE_IP" != "$RESTORE_IP" ]; then
+    fail_test "IP change test" "Restore IP mismatch (expected $RESTORE_IP, got $ACTUAL_RESTORE_IP)"
     exit 1
 fi
-
-echo "" | tee -a "$TEST_RESULTS"
-
-echo "STEP 3: Verify Cassandra Functionality"
-echo "========================================================================"
-echo ""
-
-# Check if CQL works
-if podman exec ip-test-restore cqlsh -u cassandra -p cassandra -e "SELECT cluster_name FROM system.local;" >/dev/null 2>&1; then
-    echo "✓ CQL queries work" | tee -a "$TEST_RESULTS"
-else
-    echo "✗ CQL queries failed" | tee -a "$TEST_RESULTS"
-    exit 1
-fi
-
-# Check if data restored
-RESTORED_IP=$(podman exec ip-test-restore cqlsh -u cassandra -p cassandra -e "SELECT ip FROM ip_test.data WHERE id=1;" 2>&1 | grep -v "Warning" | grep -A2 "ip" | tail -1 | tr -d ' ')
-echo "✓ Data restored (original IP in data: $RESTORED_IP)" | tee -a "$TEST_RESULTS"
-
-# Check nodetool status
-STATUS=$(podman exec ip-test-restore nodetool status 2>/dev/null | grep "^UN")
-echo "✓ Nodetool status:" | tee -a "$TEST_RESULTS"
-echo "  $STATUS" | tee -a "$TEST_RESULTS"
-
-# Check system.local after restore
-SYSTEM_LOCAL_IP=$(podman exec ip-test-restore cqlsh -u cassandra -p cassandra -e "SELECT broadcast_address FROM system.local;" 2>&1 | grep -v "Warning" | grep -A2 "broadcast_address" | tail -1 | tr -d ' ')
-echo "✓ system.local shows: $SYSTEM_LOCAL_IP" | tee -a "$TEST_RESULTS"
 
 echo ""
-echo "========================================================================"
-echo "CONCLUSION:"
-echo "========================================================================"
-echo "" | tee -a "$TEST_RESULTS"
+echo "STEP 3: Verify IP Change Handled"
+echo "------------------------------------------------------------------------"
 
-if [ "$IP_CHANGED" = "true" ]; then
-    echo "IP CHANGED on restore: $SOURCE_IP → $RESTORE_IP" | tee -a "$TEST_RESULTS"
-    echo "" | tee -a "$TEST_RESULTS"
+# CRITICAL: IPs must be different
+if [ "$ACTUAL_SOURCE_IP" = "$ACTUAL_RESTORE_IP" ]; then
+    fail_test "IP change test" "IPs are same ($ACTUAL_SOURCE_IP) - test setup error!"
+    exit 1
 fi
 
-echo "Cassandra behavior:" | tee -a "$TEST_RESULTS"
-echo "  ✓ Starts successfully after restore" | tee -a "$TEST_RESULTS"
-echo "  ✓ CQL queries work" | tee -a "$TEST_RESULTS"
-echo "  ✓ Data accessible" | tee -a "$TEST_RESULTS"
-echo "  ✓ Nodetool status shows correct IP ($RESTORE_IP)" | tee -a "$TEST_RESULTS"
-echo "  ✓ system.local updated to current IP ($SYSTEM_LOCAL_IP)" | tee -a "$TEST_RESULTS"
-echo "" | tee -a "$TEST_RESULTS"
+echo "✓ IP CHANGED: $ACTUAL_SOURCE_IP → $ACTUAL_RESTORE_IP"
 
-echo "RESULT: Cassandra handles IP changes correctly!" | tee -a "$TEST_RESULTS"
-echo "  - Uses broadcast_address from config (overrides restored system.local)" | tee -a "$TEST_RESULTS"
-echo "  - No manual intervention needed" | tee -a "$TEST_RESULTS"
-echo "  - Safe for Kubernetes pod recreation (IP may change)" | tee -a "$TEST_RESULTS"
-echo "" | tee -a "$TEST_RESULTS"
+# Verify Cassandra functional
+if ! podman exec ip-test-restore cqlsh -u cassandra -p cassandra -e "SELECT cluster_name FROM system.local;" >/dev/null 2>&1; then
+    fail_test "IP change test" "CQL queries failed after IP change"
+    exit 1
+fi
+echo "✓ CQL queries work"
 
-echo "[0;32m✓ PASS: IP address change handled correctly by Cassandra[0m" | tee -a "$TEST_RESULTS"
+# Verify data accessible
+RESTORED_DATA=$(podman exec ip-test-restore cqlsh -u cassandra -p cassandra -e "SELECT source_ip FROM ip_test.data WHERE id=1;" 2>&1 | grep -v Warning | grep -A2 "source_ip" | tail -1 | tr -d ' ')
+if [ "$RESTORED_DATA" = "$ACTUAL_SOURCE_IP" ]; then
+    echo "✓ Data accessible (original source IP in data: $RESTORED_DATA)"
+else
+    fail_test "IP change test" "Data corrupted or inaccessible"
+    exit 1
+fi
 
-# Cleanup
-podman rm -f ip-test-restore >/dev/null 2>&1
-podman network rm ip-test-net >/dev/null 2>&1
+# Verify nodetool shows new IP
+if podman exec ip-test-restore nodetool status | grep "^UN.*$ACTUAL_RESTORE_IP" >/dev/null; then
+    echo "✓ Nodetool status shows new IP ($ACTUAL_RESTORE_IP)"
+else
+    fail_test "IP change test" "Nodetool doesn't show correct IP"
+    exit 1
+fi
 
-exit 0
+echo ""
+pass_test "IP address change (${ACTUAL_SOURCE_IP} → ${ACTUAL_RESTORE_IP}): Cassandra handles correctly"
+
+print_test_summary
