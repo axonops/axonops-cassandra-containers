@@ -50,6 +50,8 @@ run_test() {
 # Wait for Cassandra to be ready (max 3 minutes)
 wait_for_cassandra() {
     local container_name="$1"
+    local username="${2:-cassandra}"
+    local password="${3:-cassandra}"
     local max_wait=180
     local elapsed=0
 
@@ -59,7 +61,7 @@ wait_for_cassandra() {
         # Check if port is listening
         if podman exec "$container_name" nc -z localhost 9042 2>/dev/null; then
             # Port is open, try a simple query
-            if podman exec "$container_name" cqlsh -u cassandra -p cassandra -e "SELECT cluster_name FROM system.local;" >/dev/null 2>&1; then
+            if podman exec "$container_name" cqlsh -u "$username" -p "$password" -e "SELECT cluster_name FROM system.local;" >/dev/null 2>&1; then
                 echo "✓ Cassandra ready (took ${elapsed}s)"
                 return 0
             fi
@@ -91,13 +93,16 @@ echo "Creating first container with data..."
 # Clean old backups (sudo for permission issues with cassandra-owned files)
 sudo rm -rf "$BACKUP_VOLUME"/* 2>/dev/null || echo "  Note: Some old backups may remain (permission issues)"
 
-# Start container (disable init scripts for test predictability)
+# Start container WITH init enabled (validates .axonops backup/restore)
+echo "Starting container with init enabled (to test .axonops semaphore preservation)..."
 podman run -d --name k8s-backup-source \
   -v "$BACKUP_VOLUME":/backup \
   -e CASSANDRA_CLUSTER_NAME=k8s-test \
   -e CASSANDRA_DC=dc1 \
-  -e CASSANDRA_HEAP_SIZE=2G \
-  -e INIT_SYSTEM_KEYSPACES_AND_ROLES=false \
+  -e CASSANDRA_HEAP_SIZE=4G \
+  -e INIT_SYSTEM_KEYSPACES_AND_ROLES=true \
+  -e AXONOPS_DB_USER=testuser \
+  -e AXONOPS_DB_PASSWORD=testpass123 \
   localhost/axondb-timeseries:backup-complete >/dev/null
 
 # Wait for Cassandra to be ready
@@ -106,15 +111,32 @@ if ! wait_for_cassandra "k8s-backup-source"; then
     exit 1
 fi
 
-# Create test data
-echo "Creating test data..."
-podman exec k8s-backup-source cqlsh -u cassandra -p cassandra -e "CREATE KEYSPACE k8s_demo WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 1};" 2>&1 | grep -v "Warning"
-podman exec k8s-backup-source cqlsh -u cassandra -p cassandra -e "CREATE TABLE k8s_demo.data (id INT PRIMARY KEY, value TEXT);" 2>&1 | grep -v "Warning"
-podman exec k8s-backup-source cqlsh -u cassandra -p cassandra -e "INSERT INTO k8s_demo.data (id, value) VALUES (1, 'K8S Test Row 1');" 2>&1 | grep -v "Warning"
-podman exec k8s-backup-source cqlsh -u cassandra -p cassandra -e "INSERT INTO k8s_demo.data (id, value) VALUES (2, 'K8S Test Row 2');" 2>&1 | grep -v "Warning"
+# Wait for init scripts to complete (check semaphores)
+echo "Waiting for init scripts to complete..."
+sleep 30  # Give init time to run
+
+# Check init completed successfully
+if podman exec k8s-backup-source test -f /var/lib/cassandra/.axonops/init-system-keyspaces.done; then
+    INIT_RESULT=$(podman exec k8s-backup-source grep "^RESULT=" /var/lib/cassandra/.axonops/init-system-keyspaces.done | cut -d'=' -f2)
+    echo "  Init result: $INIT_RESULT"
+    if [ "$INIT_RESULT" != "success" ]; then
+        fail_test "K8s restore test" "Init failed: $INIT_RESULT"
+        exit 1
+    fi
+else
+    fail_test "K8s restore test" "Init semaphore not found"
+    exit 1
+fi
+
+# Create test data using CUSTOM credentials (testuser/testpass123)
+echo "Creating test data with custom user..."
+podman exec k8s-backup-source cqlsh -u testuser -p testpass123 -e "CREATE KEYSPACE k8s_demo WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 1};" 2>&1 | grep -v "Warning"
+podman exec k8s-backup-source cqlsh -u testuser -p testpass123 -e "CREATE TABLE k8s_demo.data (id INT PRIMARY KEY, value TEXT);" 2>&1 | grep -v "Warning"
+podman exec k8s-backup-source cqlsh -u testuser -p testpass123 -e "INSERT INTO k8s_demo.data (id, value) VALUES (1, 'K8S Test Row 1');" 2>&1 | grep -v "Warning"
+podman exec k8s-backup-source cqlsh -u testuser -p testpass123 -e "INSERT INTO k8s_demo.data (id, value) VALUES (2, 'K8S Test Row 2');" 2>&1 | grep -v "Warning"
 
 # Verify data exists
-ROW_COUNT=$(podman exec k8s-backup-source cqlsh -u cassandra -p cassandra -e "SELECT COUNT(*) FROM k8s_demo.data;" 2>&1 | grep -A2 "count" | tail -1 | tr -d ' ')
+ROW_COUNT=$(podman exec k8s-backup-source cqlsh -u testuser -p testpass123 -e "SELECT COUNT(*) FROM k8s_demo.data;" 2>&1 | grep -A2 "count" | tail -1 | tr -d ' ')
 if [ "$ROW_COUNT" = "2" ]; then
     echo "✓ Test data created (2 rows)"
 else
@@ -135,6 +157,19 @@ if [ -z "$BACKUP_NAME" ]; then
 fi
 echo "Backup created: $BACKUP_NAME"
 
+# CRITICAL VALIDATION: Verify .axonops directory is in backup
+if [ -d "$BACKUP_VOLUME/data_$BACKUP_NAME/.axonops" ]; then
+    echo "✓ .axonops directory included in backup"
+    # Verify semaphores exist
+    if [ -f "$BACKUP_VOLUME/data_$BACKUP_NAME/.axonops/init-system-keyspaces.done" ]; then
+        BACKED_UP_INIT=$(grep "^RESULT=" "$BACKUP_VOLUME/data_$BACKUP_NAME/.axonops/init-system-keyspaces.done" | cut -d'=' -f2)
+        echo "  init-system-keyspaces.done: RESULT=$BACKED_UP_INIT (backed up)"
+    fi
+else
+    fail_test "K8s restore test" ".axonops directory NOT in backup (critical feature broken!)"
+    exit 1
+fi
+
 # CRITICAL: Destroy first container (simulates pod deletion in K8s)
 echo "Destroying original container (simulating pod deletion)..."
 podman stop k8s-backup-source >/dev/null 2>&1
@@ -154,12 +189,13 @@ podman run -d --name k8s-restore-target \
   -v "$BACKUP_VOLUME":/backup \
   -e CASSANDRA_CLUSTER_NAME=k8s-test \
   -e CASSANDRA_DC=dc1 \
-  -e CASSANDRA_HEAP_SIZE=2G \
+  -e CASSANDRA_HEAP_SIZE=4G \
   -e RESTORE_FROM_BACKUP="$BACKUP_NAME" \
   localhost/axondb-timeseries:backup-complete >/dev/null 2>&1
 
 # Wait for restore to complete and Cassandra to be ready
-if ! wait_for_cassandra "k8s-restore-target"; then
+# Use custom credentials (testuser/testpass123) from backed up cluster
+if ! wait_for_cassandra "k8s-restore-target" "testuser" "testpass123"; then
     fail_test "K8s restore test" "Cassandra failed to start after restore"
     podman logs k8s-restore-target | tail -50
     exit 1
@@ -169,20 +205,40 @@ fi
 if podman exec k8s-restore-target nc -z localhost 9042 2>/dev/null; then
     echo "✓ Cassandra started after restore"
 
-    # Verify restore semaphore
-    RESTORE_RESULT=$(podman exec k8s-restore-target cat /var/lib/cassandra/.axonops/restore.done | grep "^RESULT=" | cut -d'=' -f2)
+    # Verify restore semaphore (now in /tmp, not .axonops)
+    RESTORE_RESULT=$(podman exec k8s-restore-target cat /tmp/axonops-restore.done 2>/dev/null | grep "^RESULT=" | cut -d'=' -f2 || echo "not_found")
     if [ "$RESTORE_RESULT" = "success" ]; then
         echo "✓ Restore semaphore shows success"
-
-        # Verify data restored
-        RESTORED_COUNT=$(podman exec k8s-restore-target cqlsh -u cassandra -p cassandra -e "SELECT COUNT(*) FROM k8s_demo.data;" 2>&1 | grep -A2 "count" | tail -1 | tr -d ' ')
-        if [ "$RESTORED_COUNT" = "2" ]; then
-            pass_test "Kubernetes-style restore (pod recreation with volume persistence)"
-        else
-            fail_test "K8s restore test" "Data not restored correctly (expected 2 rows, got $RESTORED_COUNT)"
-        fi
     else
         fail_test "K8s restore test" "Restore failed with RESULT=$RESTORE_RESULT"
+        exit 1
+    fi
+
+    # CRITICAL: Verify init semaphores came from BACKUP (not re-run)
+    if [ -f "$BACKUP_VOLUME/data_$BACKUP_NAME/.axonops/init-system-keyspaces.done" ]; then
+        RESTORED_INIT=$(podman exec k8s-restore-target grep "^RESULT=" /var/lib/cassandra/.axonops/init-system-keyspaces.done | cut -d'=' -f2)
+        echo "✓ Init semaphore restored from backup: RESULT=$RESTORED_INIT"
+
+        # Check init log - should NOT show re-init (restore skipped init)
+        INIT_LOG_SIZE=$(podman exec k8s-restore-target stat -c%s /var/log/cassandra/init-system-keyspaces.log 2>/dev/null || echo "0")
+        if [ "$INIT_LOG_SIZE" -eq 0 ]; then
+            echo "✓ Init was skipped (used semaphores from backup, not re-run)"
+        else
+            fail_test "K8s restore test" "Init re-ran during restore (should use backup's semaphores!)"
+            exit 1
+        fi
+    else
+        fail_test "K8s restore test" "Init semaphore not found in backup"
+        exit 1
+    fi
+
+    # Verify data restored using CUSTOM credentials (testuser/testpass123)
+    RESTORED_COUNT=$(podman exec k8s-restore-target cqlsh -u testuser -p testpass123 -e "SELECT COUNT(*) FROM k8s_demo.data;" 2>&1 | grep -A2 "count" | tail -1 | tr -d ' ')
+    if [ "$RESTORED_COUNT" = "2" ]; then
+        echo "✓ Data restored and accessible with custom credentials"
+        pass_test "Kubernetes-style restore (pod recreation + .axonops preservation + custom credentials)"
+    else
+        fail_test "K8s restore test" "Data not restored correctly (expected 2 rows, got $RESTORED_COUNT)"
     fi
 else
     fail_test "K8s restore test" "Cassandra did not start"
@@ -211,7 +267,7 @@ podman run -d --name retention-test \
   -v "$BACKUP_VOLUME":/backup \
   -e CASSANDRA_CLUSTER_NAME=retention-test \
   -e CASSANDRA_DC=dc1 \
-  -e CASSANDRA_HEAP_SIZE=2G \
+  -e CASSANDRA_HEAP_SIZE=4G \
   -e INIT_SYSTEM_KEYSPACES_AND_ROLES=false \
   localhost/axondb-timeseries:backup-complete >/dev/null
 
@@ -283,7 +339,7 @@ podman run -d --name hardlink-disabled-test \
   -v "$BACKUP_VOLUME":/backup \
   -e CASSANDRA_CLUSTER_NAME=hardlink-test \
   -e CASSANDRA_DC=dc1 \
-  -e CASSANDRA_HEAP_SIZE=2G \
+  -e CASSANDRA_HEAP_SIZE=4G \
   -e INIT_SYSTEM_KEYSPACES_AND_ROLES=false \
   localhost/axondb-timeseries:backup-complete >/dev/null
 
@@ -349,7 +405,7 @@ podman run -d --name hardlink-chain-test \
   -v "$BACKUP_VOLUME":/backup \
   -e CASSANDRA_CLUSTER_NAME=chain-test \
   -e CASSANDRA_DC=dc1 \
-  -e CASSANDRA_HEAP_SIZE=2G \
+  -e CASSANDRA_HEAP_SIZE=4G \
   -e INIT_SYSTEM_KEYSPACES_AND_ROLES=false \
   localhost/axondb-timeseries:backup-complete >/dev/null
 
