@@ -6,8 +6,11 @@ set -euo pipefail
 # Purpose: Run scheduled backups in background (container-native, no cron needed)
 # ============================================================================
 
+# Script name for dynamic logging (auto-detect from $0)
+SCRIPT_NAME=$(basename "$0" .sh)
+
 log() {
-    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [SCHEDULER] $*"
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [${SCRIPT_NAME}] $*"
 }
 
 # Log rotation configuration for scheduler log

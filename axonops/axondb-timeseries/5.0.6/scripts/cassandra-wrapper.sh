@@ -11,8 +11,11 @@ set -e
 # - Then starts Cassandra with restored data
 # This prevents Kubernetes startup probe timeouts on long restores
 
+# Script name for dynamic logging (auto-detect from $0)
+SCRIPT_NAME=$(basename "$0" .sh)
+
 log() {
-    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [WRAPPER] $*"
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [${SCRIPT_NAME}] $*"
 }
 
 log "Cassandra wrapper starting"
@@ -45,18 +48,18 @@ if [ -n "${RESTORE_FROM_BACKUP:-}" ] || [ "${RESTORE_ENABLED:-false}" = "true" ]
 
                 # Log progress every 30 checks (60 seconds)
                 if [ $((WAIT_COUNT % 30)) -eq 0 ]; then
-                    log "Still waiting for restore to complete (waited $((WAIT_COUNT * 2))s)..."
+                    log "Still waiting for restore to complete (waited $((WAIT_COUNT * 10))s)..."
                 fi
 
-                sleep 2
+                sleep 10
             else
                 log "WARNING: Unknown restore result: $RESTORE_RESULT (waiting...)"
-                sleep 2
+                sleep 10
             fi
         else
             # Semaphore doesn't exist yet - restore script hasn't started
             log "Waiting for restore script to start (semaphore not found)..."
-            sleep 2
+            sleep 10
         fi
     done
 else

@@ -398,6 +398,23 @@ else
     echo ""
 fi
 
+# ============================================================================
+# Start Semaphore Monitor (background daemon for kubectl logs visibility)
+# ============================================================================
+# Monitors all semaphore files and echoes in-progress/error states to console
+# Provides visibility into long-running operations (backups, restores, cleanup)
+ENABLE_SEMAPHORE_MONITOR="${ENABLE_SEMAPHORE_MONITOR:-true}"
+
+if [ "$ENABLE_SEMAPHORE_MONITOR" = "true" ]; then
+    echo "Starting semaphore monitor daemon..."
+    echo "  Interval: ${SEMAPHORE_MONITOR_INTERVAL:-60}s"
+    echo "  Monitors: backup.lock, retention-cleanup.lock, restore.done, init semaphores"
+    echo "  Alerts on: in_progress, error, failed states"
+    (/usr/local/bin/semaphore-monitor.sh >> /var/log/cassandra/semaphore-monitor.log 2>&1 &)
+    echo "✓ Semaphore monitor started"
+    echo ""
+fi
+
 echo "=== Starting Cassandra ==="
 echo ""
 

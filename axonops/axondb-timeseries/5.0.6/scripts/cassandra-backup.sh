@@ -9,13 +9,16 @@ set -euo pipefail
 # Script version for logging
 SCRIPT_VERSION="1.1.1"
 
-# Logging helper with timestamps
+# Script name for dynamic logging (auto-detect from $0)
+SCRIPT_NAME=$(basename "$0" .sh)
+
+# Logging helper with timestamps (uses dynamic script name)
 log() {
-    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [BACKUP] $*"
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [${SCRIPT_NAME}] $*"
 }
 
 log_error() {
-    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [BACKUP] ERROR: $*" >&2
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [${SCRIPT_NAME}] ERROR: $*" >&2
 }
 
 # Timing helper

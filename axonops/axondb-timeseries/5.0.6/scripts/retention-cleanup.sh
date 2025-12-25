@@ -10,13 +10,16 @@ set -euo pipefail
 
 SCRIPT_VERSION="1.0.0"
 
-# Logging
+# Script name for dynamic logging (auto-detect from $0)
+SCRIPT_NAME=$(basename "$0" .sh)
+
+# Logging (uses dynamic script name)
 log() {
-    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [RETENTION] $*"
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [${SCRIPT_NAME}] $*"
 }
 
 log_error() {
-    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [RETENTION] ERROR: $*" >&2
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [${SCRIPT_NAME}] ERROR: $*" >&2
 }
 
 # Timing
@@ -103,6 +106,8 @@ FAILED=0
 
 # Timeout for entire cleanup operation
 # Pass backup list via stdin to timeout command
+# Export SCRIPT_NAME for subshell
+export SCRIPT_NAME
 echo "$BACKUPS_TO_DELETE" | timeout ${CLEANUP_TIMEOUT_MINUTES}m bash -c '
 while IFS= read -r backup_path; do
     if [ -z "$backup_path" ]; then
@@ -111,12 +116,12 @@ while IFS= read -r backup_path; do
 
     backup_name=$(basename "$backup_path")
 
-    echo "[$(date -u +'"'"'%Y-%m-%dT%H:%M:%SZ'"'"')] [RETENTION]   Deleting: $backup_name"
+    echo "[$(date -u +'"'"'%Y-%m-%dT%H:%M:%SZ'"'"')] [${SCRIPT_NAME}]   Deleting: $backup_name"
 
     if rm -rf "$backup_path" 2>&1; then
-        echo "[$(date -u +'"'"'%Y-%m-%dT%H:%M:%SZ'"'"')] [RETENTION]     ✓ Deleted: $backup_name"
+        echo "[$(date -u +'"'"'%Y-%m-%dT%H:%M:%SZ'"'"')] [${SCRIPT_NAME}]     ✓ Deleted: $backup_name"
     else
-        echo "[$(date -u +'"'"'%Y-%m-%dT%H:%M:%SZ'"'"')] [RETENTION]     ✗ Failed to delete: $backup_name"
+        echo "[$(date -u +'"'"'%Y-%m-%dT%H:%M:%SZ'"'"')] [${SCRIPT_NAME}]     ✗ Failed to delete: $backup_name"
     fi
 done
 '

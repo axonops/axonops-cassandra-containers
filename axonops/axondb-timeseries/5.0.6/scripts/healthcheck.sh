@@ -8,8 +8,11 @@ MODE="${1:-readiness}"
 CQL_PORT="${CASSANDRA_NATIVE_TRANSPORT_PORT:-9042}"
 TIMEOUT="${HEALTH_CHECK_TIMEOUT:-10}"
 
+# Script name for logging (combined with mode for context)
+SCRIPT_NAME=$(basename "$0" .sh)
+
 log() {
-  echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [$MODE] $*" >&2
+  echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [${SCRIPT_NAME}:$MODE] $*" >&2
 }
 
 case "$MODE" in
