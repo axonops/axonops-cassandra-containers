@@ -307,12 +307,25 @@ podman exec retention-test sh -c 'BACKUP_RETENTION_HOURS=2 /usr/local/bin/cassan
 
 # Wait for async retention cleanup to complete (it runs in background)
 echo "Waiting for async retention cleanup to complete..."
-sleep 10  # Give async deletion time to finish
 
-# Verify cleanup semaphore if it exists
-if podman exec retention-test test -f /tmp/axonops-retention-cleanup.lock 2>/dev/null; then
-    echo "  Cleanup still running, waiting..."
-    sleep 20
+# Poll for semaphore to disappear (cleanup complete)
+MAX_WAIT=60
+ELAPSED=0
+while [ $ELAPSED -lt $MAX_WAIT ]; do
+    if podman exec retention-test test -f /tmp/axonops-retention-cleanup.lock 2>/dev/null; then
+        if [ $((ELAPSED % 10)) -eq 0 ] && [ $ELAPSED -gt 0 ]; then
+            echo "  Cleanup still running (${ELAPSED}s)..."
+        fi
+        sleep 2
+        ELAPSED=$((ELAPSED + 2))
+    else
+        echo "✓ Async cleanup completed (took ${ELAPSED}s)"
+        break
+    fi
+done
+
+if [ $ELAPSED -ge $MAX_WAIT ]; then
+    echo "WARNING: Cleanup still running after ${MAX_WAIT}s (continuing anyway)"
 fi
 
 # Count remaining backups

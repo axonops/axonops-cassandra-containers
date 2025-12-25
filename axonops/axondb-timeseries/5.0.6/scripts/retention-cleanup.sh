@@ -102,19 +102,24 @@ DELETED=0
 FAILED=0
 
 # Timeout for entire cleanup operation
-timeout ${CLEANUP_TIMEOUT_MINUTES}m bash <<'CLEANUP_SCRIPT'
+# Pass backup list via stdin to timeout command
+echo "$BACKUPS_TO_DELETE" | timeout ${CLEANUP_TIMEOUT_MINUTES}m bash -c '
 while IFS= read -r backup_path; do
+    if [ -z "$backup_path" ]; then
+        continue
+    fi
+
     backup_name=$(basename "$backup_path")
 
-    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [RETENTION]   Deleting: $backup_name"
+    echo "[$(date -u +'"'"'%Y-%m-%dT%H:%M:%SZ'"'"')] [RETENTION]   Deleting: $backup_name"
 
     if rm -rf "$backup_path" 2>&1; then
-        echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [RETENTION]     ✓ Deleted: $backup_name"
+        echo "[$(date -u +'"'"'%Y-%m-%dT%H:%M:%SZ'"'"')] [RETENTION]     ✓ Deleted: $backup_name"
     else
-        echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [RETENTION]     ✗ Failed: $backup_name"
+        echo "[$(date -u +'"'"'%Y-%m-%dT%H:%M:%SZ'"'"')] [RETENTION]     ✗ Failed to delete: $backup_name"
     fi
 done
-CLEANUP_SCRIPT <<< "$BACKUPS_TO_DELETE"
+'
 
 CLEANUP_EXIT=$?
 
