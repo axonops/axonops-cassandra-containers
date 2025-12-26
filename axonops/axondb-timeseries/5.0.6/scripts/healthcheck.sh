@@ -72,7 +72,7 @@ case "$MODE" in
     fi
 
     # Check if Cassandra process is running
-    if ! pgrep -f cassandra > /dev/null 2>&1; thenstartup
+    if ! pgrep -f cassandra > /dev/null 2>&1; then
       log "Cassandra process not running"
       exit 1
     fi
