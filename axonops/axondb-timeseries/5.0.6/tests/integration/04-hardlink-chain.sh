@@ -87,9 +87,26 @@ echo "STEP 3: Select test file from backup-2"
 echo "------------------------------------------------------------------------"
 
 # Find a .db file in backup-2 that has Links > 1
-TEST_FILE=$(find "$BACKUP_2" -type f -name "*.db" -links +1 2>/dev/null | head -1)
+echo "  Searching for hardlinked .db files in: $BACKUP_2"
+
+# Use a different approach - find any .db file and check its link count
+TEST_FILE=""
+for file in $(find "$BACKUP_2" -type f -name "*.db" 2>/dev/null | head -20); do
+    LINK_COUNT=$(stat -c%h "$file" 2>/dev/null || echo "1")
+    if [ "$LINK_COUNT" -gt 1 ]; then
+        TEST_FILE="$file"
+        break
+    fi
+done
 
 if [ -z "$TEST_FILE" ]; then
+    echo "  ERROR: No hardlinked .db files found"
+    echo "  All .db files in backup-2:"
+    find "$BACKUP_2" -type f -name "*.db" 2>/dev/null | head -10
+    echo "  Checking link counts:"
+    for f in $(find "$BACKUP_2" -type f -name "*.db" 2>/dev/null | head -3); do
+        echo "  $f: $(stat -c%h "$f" 2>/dev/null || echo "?") links"
+    done
     fail_test "Hardlink chain" "No hardlinked files found in backup-2"
     exit 1
 fi
