@@ -66,7 +66,7 @@ echo ""
 run_test
 echo "Test 1: Validate bash syntax for all scripts"
 SYNTAX_ERRORS=0
-for script in healthcheck.sh entrypoint.sh cassandra-backup.sh cassandra-restore.sh backup-scheduler.sh cassandra-wrapper.sh retention-cleanup.sh log-rotate.sh semaphore-monitor.sh; do
+for script in healthcheck.sh docker-entrypoint.sh cassandra-backup.sh cassandra-restore.sh backup-scheduler.sh cassandra-wrapper.sh retention-cleanup.sh log-rotate.sh semaphore-monitor.sh; do
     if ! podman exec "$CONTAINER_NAME" bash -n /usr/local/bin/$script 2>/dev/null; then
         echo "  ✗ Syntax error in: $script"
         SYNTAX_ERRORS=$((SYNTAX_ERRORS + 1))
@@ -340,18 +340,18 @@ else
     fail_test "Restore rsync retry" "RESTORE_RSYNC_RETRIES not found"
 fi
 
-# Test 20: Backup script gracefully skips when Cassandra not running
+# Test 20: Backup script errors when Cassandra not running
 run_test
-echo "Test 17: Backup script skips gracefully when Cassandra not running"
-if podman exec "$CONTAINER_NAME" grep -q "WARNING: Cassandra process is not running" /usr/local/bin/cassandra-backup.sh; then
-    # Check that script exits 0 (not 1) when Cassandra not running
-    if podman exec "$CONTAINER_NAME" sh -c 'grep -A5 "WARNING: Cassandra process is not running" /usr/local/bin/cassandra-backup.sh' | grep -q "exit 0"; then
-        pass_test "Backup script gracefully skips when Cassandra not running (exit 0)"
+echo "Test 17: Backup script errors when Cassandra not running"
+if podman exec "$CONTAINER_NAME" grep -q "Cassandra process is not running" /usr/local/bin/cassandra-backup.sh; then
+    # Check that script writes error semaphore and exits 1
+    if podman exec "$CONTAINER_NAME" sh -c 'grep -A5 "Cassandra process is not running" /usr/local/bin/cassandra-backup.sh' | grep -q "write_error_semaphore"; then
+        pass_test "Backup script errors when Cassandra not running (writes error semaphore)"
     else
-        fail_test "Backup Cassandra check" "Script doesn't exit 0 after warning"
+        fail_test "Backup Cassandra check" "Script doesn't write error semaphore"
     fi
 else
-    fail_test "Backup Cassandra check" "Warning message not found"
+    fail_test "Backup Cassandra check" "Cassandra check not found"
 fi
 
 echo ""
