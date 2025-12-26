@@ -180,9 +180,9 @@ cd integration
 - ~8GB RAM for containers
 
 ### Backup Volume
-Tests use: `~/axondb-backup-testing/backup-volume`
+Tests use: `.test-backups/` (project-local directory)
 
-Created automatically, cleaned between tests.
+Created automatically, cleaned between tests, added to .gitignore.
 
 ## Test Repeatability
 

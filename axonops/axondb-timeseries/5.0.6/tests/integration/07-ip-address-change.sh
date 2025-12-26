@@ -12,7 +12,6 @@ trap cleanup_test_resources EXIT
 # IP Address Change on Restore Test
 # ============================================================================
 
-BACKUP_VOLUME=~/axondb-backup-testing/backup-volume
 TEST_NETWORK="ip-test-net"
 SOURCE_IP="172.30.0.100"
 RESTORE_IP="172.30.0.200"

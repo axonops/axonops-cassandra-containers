@@ -6,7 +6,7 @@ set -e
 
 TEST_DIR="$(cd "$(dirname "$0")" && pwd)"
 RESULTS_FILE="${TEST_DIR}/comprehensive-test-results.txt"
-BACKUP_VOLUME=~/axondb-backup-testing/backup-volume
+BACKUP_VOLUME="${TEST_DIR}/.test-backups"
 
 # Colors
 GREEN='\033[0;32m'

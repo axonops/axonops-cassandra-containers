@@ -2,6 +2,10 @@
 # Common test utilities and cleanup functions
 # Source this in all test scripts
 
+# Project-local backup volume (relative to tests/ directory)
+TEST_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BACKUP_VOLUME="${TEST_ROOT}/.test-backups"
+
 # Colors
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -98,7 +102,7 @@ create_test_container() {
     register_container "$name"
 
     podman run -d --name "$name" \
-        -v ~/axondb-backup-testing/backup-volume:/backup \
+        -v "$BACKUP_VOLUME":/backup \
         -e CASSANDRA_CLUSTER_NAME=test-cluster \
         -e CASSANDRA_DC=dc1 \
         -e CASSANDRA_HEAP_SIZE=4G \

@@ -8,7 +8,6 @@ set -e
 # Key Question: Do hardlinks survive rsync to remote/different directory?
 # Answer: NO - rsync copies actual file data (this is GOOD for portability!)
 
-BACKUP_VOLUME=~/axondb-backup-testing/backup-volume
 REMOTE_DIR=~/axondb-backup-testing/remote-backup-copy
 TEST_RESULTS="hardlink-portability-results.txt"
 

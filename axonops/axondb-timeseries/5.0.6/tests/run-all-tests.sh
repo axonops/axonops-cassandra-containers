@@ -48,7 +48,8 @@ run_test_suite() {
 cleanup_before_tests() {
     echo "Cleaning up any leftover test resources..."
     podman rm -f $(podman ps -aq) 2>/dev/null || true
-    sudo rm -rf ~/axondb-backup-testing/backup-volume/* 2>/dev/null || true
+    mkdir -p .test-backups
+    sudo rm -rf .test-backups/* 2>/dev/null || true
     podman network ls --format "{{.Name}}" | grep -E "ip-test|test-" | xargs -r podman network rm 2>/dev/null || true
     rm -f results/*.log results/*-results.txt 2>/dev/null || true
     echo "✓ Clean slate"
@@ -80,7 +81,7 @@ if [ -f "smoke/basic-functionality.sh" ]; then
     fi
 fi
 
-# Integration Tests (run in order: 01-09)
+# Integration Tests (run in order: 00-09, includes comprehensive test as 00)
 for test in integration/0*.sh; do
     if [ -f "$test" ]; then
         test_name=$(basename "$test" .sh | sed 's/^[0-9]*-//' | sed 's/-/ /g' | sed 's/\b\(.\)/\u\1/g')

@@ -34,7 +34,7 @@ clean:
 	@echo "Cleaning test resources..."
 	@podman rm -f $$(podman ps -aq) 2>/dev/null || true
 	@podman network ls --format "{{.Name}}" | grep -E "ip-test|test-" | xargs -r podman network rm 2>/dev/null || true
-	@sudo rm -rf ~/axondb-backup-testing/backup-volume/* 2>/dev/null || true
+	@sudo rm -rf .test-backups/* 2>/dev/null || true
 	@rm -f results/*.log results/*-results.txt 2>/dev/null || true
 	@echo "✓ Clean"
 

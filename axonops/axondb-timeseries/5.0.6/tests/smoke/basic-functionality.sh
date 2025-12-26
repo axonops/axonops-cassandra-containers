@@ -10,7 +10,6 @@ source "$SCRIPT_DIR/../lib/test-common.sh"
 trap cleanup_test_resources EXIT
 
 RESULTS_FILE="$SCRIPT_DIR/../results/smoke-test-results.txt"
-BACKUP_VOLUME=~/axondb-backup-testing/backup-volume
 
 echo "AxonDB Cassandra Backup/Restore Comprehensive Smoke Test Suite"
 echo "=============================================================="

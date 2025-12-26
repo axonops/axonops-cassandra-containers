@@ -17,8 +17,6 @@ source "$SCRIPT_DIR/../lib/test-common.sh"
 
 trap cleanup_test_resources EXIT
 
-BACKUP_VOLUME=~/axondb-backup-testing/backup-volume
-
 echo "========================================================================"
 echo "Retention Policy Test"
 echo "========================================================================"

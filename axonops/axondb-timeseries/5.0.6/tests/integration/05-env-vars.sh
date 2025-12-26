@@ -13,7 +13,6 @@ source "$SCRIPT_DIR/../lib/test-common.sh"
 # Trap for cleanup
 trap cleanup_test_resources EXIT
 
-BACKUP_VOLUME=~/axondb-backup-testing/backup-volume
 TEST_RESULTS="results/integration-env-vars-results.txt"
 
 echo "========================================================================"
