@@ -1,22 +1,16 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # AxonDB Cassandra Backup/Restore Comprehensive Smoke Tests
 # Tests backup script, restore script, retry logic, timeout handling, and error scenarios
 
-TEST_DIR="$(cd "$(dirname "$0")" && pwd)"
-RESULTS_FILE="${TEST_DIR}/backup-smoke-test-results.txt"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../lib/test-common.sh"
 
-# Colors for output
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+trap cleanup_test_resources EXIT
 
-# Test counters
-TESTS_RUN=0
-TESTS_PASSED=0
-TESTS_FAILED=0
+RESULTS_FILE="$SCRIPT_DIR/../results/smoke-test-results.txt"
+BACKUP_VOLUME=~/axondb-backup-testing/backup-volume
 
 echo "AxonDB Cassandra Backup/Restore Comprehensive Smoke Test Suite"
 echo "=============================================================="
@@ -25,34 +19,14 @@ echo "Test results will be saved to: ${RESULTS_FILE}"
 echo ""
 
 # Initialize results file
+mkdir -p "$(dirname "$RESULTS_FILE")"
 echo "AxonDB Cassandra Backup/Restore Smoke Test Results" > "$RESULTS_FILE"
 echo "===================================================" >> "$RESULTS_FILE"
 echo "Date: $(date)" >> "$RESULTS_FILE"
 echo "" >> "$RESULTS_FILE"
 
-# Test functions
-pass_test() {
-    local test_name="$1"
-    echo -e "${GREEN}✓ PASS${NC}: $test_name"
-    echo "✓ PASS: $test_name" >> "$RESULTS_FILE"
-    TESTS_PASSED=$((TESTS_PASSED + 1))
-}
-
-fail_test() {
-    local test_name="$1"
-    local reason="$2"
-    echo -e "${RED}✗ FAIL${NC}: $test_name"
-    echo "  Reason: $reason"
-    echo "✗ FAIL: $test_name - $reason" >> "$RESULTS_FILE"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-}
-
-run_test() {
-    TESTS_RUN=$((TESTS_RUN + 1))
-}
-
 # Configuration
-CONTAINER_NAME="${CONTAINER_NAME:-cassandra-backup-test}"
+CONTAINER_NAME="cassandra-smoke-test"
 CQL_PORT=9042
 
 echo "Configuration:"
@@ -60,12 +34,29 @@ echo "  Container: $CONTAINER_NAME"
 echo "  CQL Port: $CQL_PORT"
 echo ""
 
-# Check if container is running
-if ! podman inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
-    echo "ERROR: Container '$CONTAINER_NAME' not found or not running"
-    echo "Please start the container first"
+# Clean backup volume
+sudo rm -rf "$BACKUP_VOLUME"/* 2>/dev/null || true
+
+# Create test container
+echo "Creating test container..."
+podman run -d --name "$CONTAINER_NAME" \
+  -v "$BACKUP_VOLUME":/backup \
+  -e CASSANDRA_CLUSTER_NAME=smoke-test \
+  -e CASSANDRA_DC=dc1 \
+  -e CASSANDRA_HEAP_SIZE=4G \
+  -e INIT_SYSTEM_KEYSPACES_AND_ROLES=false \
+  localhost/axondb-timeseries:backup-complete >/dev/null 2>&1
+
+register_container "$CONTAINER_NAME"
+
+# Wait for Cassandra to be ready
+if ! wait_for_cassandra_ready "$CONTAINER_NAME"; then
+    fail_test "Container startup" "Cassandra failed to start"
     exit 1
 fi
+
+echo "✓ Container ready"
+echo ""
 
 echo "========================================" | tee -a "$RESULTS_FILE"
 echo "BACKUP SCRIPT TESTS" | tee -a "$RESULTS_FILE"
@@ -130,7 +121,7 @@ echo "Test 5: Create second backup with hardlink deduplication"
 sleep 5  # Ensure different timestamp
 
 # Clean any stale lock from previous test (trap may not have run yet)
-podman exec "$CONTAINER_NAME" rm -f /var/lib/cassandra/.axonops/backup.lock 2>/dev/null || true
+podman exec "$CONTAINER_NAME" rm -f /tmp/axonops-backup.lock 2>/dev/null || true
 
 if podman exec "$CONTAINER_NAME" /usr/local/bin/cassandra-backup.sh > /tmp/backup-test-2.log 2>&1; then
     # Check for hardlink deduplication message
@@ -208,6 +199,8 @@ podman run -d --name "$RESTORE_CONTAINER" \
   -e RESTORE_FROM_BACKUP="$RESTORE_BACKUP" \
   localhost/axondb-timeseries:backup-complete >/dev/null 2>&1
 
+register_container "$RESTORE_CONTAINER"
+
 # Wait for restore to complete and Cassandra to start (restore + startup takes ~45s)
 sleep 45
 MAX_WAIT=120
@@ -223,9 +216,9 @@ until podman exec "$RESTORE_CONTAINER" nc -z localhost "$CQL_PORT" 2>/dev/null; 
 done
 
 if podman exec "$RESTORE_CONTAINER" nc -z localhost "$CQL_PORT" 2>/dev/null; then
-    # Check restore semaphore
-    if podman exec "$RESTORE_CONTAINER" test -f /var/lib/cassandra/.axonops/restore.done; then
-        RESTORE_RESULT=$(podman exec "$RESTORE_CONTAINER" cat /var/lib/cassandra/.axonops/restore.done 2>/dev/null | grep "^RESULT=" | cut -d'=' -f2)
+    # Check restore semaphore (in /tmp, not .axonops)
+    if podman exec "$RESTORE_CONTAINER" test -f /tmp/axonops-restore.done; then
+        RESTORE_RESULT=$(podman exec "$RESTORE_CONTAINER" cat /tmp/axonops-restore.done 2>/dev/null | grep "^RESULT=" | cut -d'=' -f2)
         if [ "$RESTORE_RESULT" = "success" ]; then
             pass_test "Restore via entrypoint successful (Cassandra started with restored data)"
         else
@@ -417,7 +410,7 @@ wait $BACKUP_PID 2>/dev/null || true
 
 # Clean lock to avoid affecting next tests
 sleep 2
-podman exec "$CONTAINER_NAME" rm -f /var/lib/cassandra/.axonops/backup.lock 2>/dev/null || true
+podman exec "$CONTAINER_NAME" rm -f /tmp/axonops-backup.lock 2>/dev/null || true
 
 echo ""
 echo "========================================" | tee -a "$RESULTS_FILE"

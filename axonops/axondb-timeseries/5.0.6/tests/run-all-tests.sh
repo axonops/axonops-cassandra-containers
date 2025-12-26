@@ -80,23 +80,13 @@ if [ -f "smoke/basic-functionality.sh" ]; then
     fi
 fi
 
-# Core Integration Tests (comprehensive scenarios)
-if [ -f "comprehensive-backup-tests.sh" ]; then
-    if ! run_test_suite "Core Integration (K8s, Retention, Hardlinks)" "comprehensive-backup-tests.sh"; then
-        if [ "$CONTINUE_ON_FAILURE" != "true" ]; then
-            echo "Core integration tests failed - stopping"
-            exit 1
-        fi
-    fi
-fi
-
-# Additional Integration Tests
-for test in integration/*.sh; do
+# Integration Tests (run in order: 01-09)
+for test in integration/0*.sh; do
     if [ -f "$test" ]; then
         test_name=$(basename "$test" .sh | sed 's/^[0-9]*-//' | sed 's/-/ /g' | sed 's/\b\(.\)/\u\1/g')
-        if ! run_test_suite "$test_name" "$test"; then
+        if ! run_test_suite "Integration: $test_name" "$test"; then
             if [ "$CONTINUE_ON_FAILURE" != "true" ]; then
-                echo "Integration test failed - stopping"
+                echo "Integration test $(basename $test) failed - stopping"
                 exit 1
             fi
         fi

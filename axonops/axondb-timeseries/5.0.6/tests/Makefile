@@ -1,10 +1,15 @@
-.PHONY: test test-smoke test-integration test-all clean help
+.PHONY: build test test-smoke test-integration test-all clean help
 
 # Default target
 all: test
 
-# Run all test suites
-test: clean
+# Build the image
+build:
+	@echo "Building image: localhost/axondb-timeseries:backup-complete"
+	@cd .. && ./build-local.sh -t localhost/axondb-timeseries:backup-complete
+
+# Run all test suites (builds first)
+test: build clean
 	@echo "Running complete test suite..."
 	@bash run-all-tests.sh
 
@@ -16,8 +21,7 @@ test-smoke: clean
 # Integration tests only
 test-integration: clean
 	@echo "Running integration tests..."
-	@bash comprehensive-backup-tests.sh
-	@for test in integration/*.sh; do \
+	@for test in integration/0*.sh; do \
 		echo "Running $$test..."; \
 		bash $$test || exit 1; \
 	done
