@@ -1,21 +1,20 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # ============================================================================
 # Environment Variable Integration Tests
 # Purpose: Verify env vars trigger expected behavior (not just direct script calls)
 # ============================================================================
 
+# Source common test utilities
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../lib/test-common.sh"
+
+# Trap for cleanup
+trap cleanup_test_resources EXIT
+
 BACKUP_VOLUME=~/axondb-backup-testing/backup-volume
-TEST_RESULTS="integration-env-vars-results.txt"
-
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-NC='\033[0m'
-
-TESTS_RUN=0
-TESTS_PASSED=0
-TESTS_FAILED=0
+TEST_RESULTS="results/integration-env-vars-results.txt"
 
 echo "========================================================================"
 echo "Environment Variable Integration Tests"
@@ -24,25 +23,12 @@ echo ""
 echo "Results: $TEST_RESULTS"
 echo ""
 
-# Initialize results
+# Initialize results file
+mkdir -p "$(dirname "$TEST_RESULTS")"
 echo "Environment Variable Integration Test Results" > "$TEST_RESULTS"
 echo "==============================================" >> "$TEST_RESULTS"
 echo "Date: $(date)" >> "$TEST_RESULTS"
 echo "" >> "$TEST_RESULTS"
-
-pass_test() {
-    echo -e "${GREEN}✓ PASS${NC}: $1" | tee -a "$TEST_RESULTS"
-    TESTS_PASSED=$((TESTS_PASSED + 1))
-}
-
-fail_test() {
-    echo -e "${RED}✗ FAIL${NC}: $1 - $2" | tee -a "$TEST_RESULTS"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-}
-
-run_test() {
-    TESTS_RUN=$((TESTS_RUN + 1))
-}
 
 # Clean environment
 sudo rm -rf "$BACKUP_VOLUME"/* 2>/dev/null || true
@@ -202,21 +188,4 @@ podman rm -f test-no-retention >/dev/null 2>&1
 # ============================================================================
 # Summary
 # ============================================================================
-echo ""
-echo "========================================================================"
-echo "TEST SUMMARY"
-echo "========================================================================"
-echo ""
-
-echo "Tests Run:    $TESTS_RUN" | tee -a "$TEST_RESULTS"
-echo "Tests Passed: $TESTS_PASSED" | tee -a "$TEST_RESULTS"
-echo "Tests Failed: $TESTS_FAILED" | tee -a "$TEST_RESULTS"
-echo "" | tee -a "$TEST_RESULTS"
-
-if [ $TESTS_FAILED -eq 0 ]; then
-    echo -e "${GREEN}✓ ALL INTEGRATION TESTS PASSED!${NC}" | tee -a "$TEST_RESULTS"
-    exit 0
-else
-    echo -e "${RED}✗ SOME TESTS FAILED${NC}" | tee -a "$TEST_RESULTS"
-    exit 1
-fi
+print_test_summary
