@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Source common test utilities
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "$SCRIPT_DIR/test-common.sh"
+source "$SCRIPT_DIR/../lib/test-common.sh"
 
 # Trap for cleanup
 trap cleanup_test_resources EXIT
