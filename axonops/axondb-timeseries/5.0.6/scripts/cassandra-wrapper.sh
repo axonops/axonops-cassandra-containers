@@ -35,7 +35,17 @@ if [ -n "${RESTORE_FROM_BACKUP:-}" ] || [ "${RESTORE_ENABLED:-false}" = "true" ]
             RESTORE_RESULT=$(grep "^RESULT=" "$RESTORE_SEMAPHORE" | cut -d'=' -f2)
 
             if [ "$RESTORE_RESULT" = "success" ]; then
-                log "✓ Restore completed successfully - starting Cassandra with restored data"
+                log "✓ Restore completed successfully"
+
+                # Check if credential reset was performed
+                if grep -q "CREDENTIALS_RESET=true" "$RESTORE_SEMAPHORE" 2>/dev/null; then
+                    log "Credential reset detected - custom user creation may be needed"
+                    # Start Cassandra first, then run post-restore user creation
+                    # User creation script will run AFTER we start Cassandra (it waits for CQL ready)
+                    CREDENTIAL_RESET_PERFORMED=true
+                fi
+
+                log "Starting Cassandra with restored data"
                 break
             elif [ "$RESTORE_RESULT" = "failed" ]; then
                 RESTORE_REASON=$(grep "^REASON=" "$RESTORE_SEMAPHORE" | cut -d'=' -f2 || echo "unknown")
@@ -67,5 +77,11 @@ else
 fi
 
 # Start Cassandra (replace this process with Cassandra)
+# If credential reset was performed, start post-restore user creation in background
+if [ "${CREDENTIAL_RESET_PERFORMED:-false}" = "true" ]; then
+    log "Starting post-restore user creation in background..."
+    (/usr/local/bin/post-restore-create-user.sh > /var/log/cassandra/post-restore-user.log 2>&1 &)
+fi
+
 log "Executing Cassandra: $@"
 exec "$@"

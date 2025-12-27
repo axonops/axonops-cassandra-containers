@@ -90,6 +90,7 @@ trap cleanup_on_failure EXIT
 # Restore configuration
 RESTORE_FROM_BACKUP="${RESTORE_FROM_BACKUP:-}"
 RESTORE_ENABLED="${RESTORE_ENABLED:-false}"
+RESTORE_RESET_CREDENTIALS="${RESTORE_RESET_CREDENTIALS:-false}"  # Delete system_auth to reset credentials
 BACKUP_VOLUME="${BACKUP_VOLUME:-/backup}"
 BACKUP_TAG_PREFIX="${BACKUP_TAG_PREFIX:-backup}"
 
@@ -111,11 +112,21 @@ CASSANDRA_DATA_DIR="${CASSANDRA_DATA_DIR:-/var/lib/cassandra/data}"
 log "Configuration:"
 log "  Restore From Backup: ${RESTORE_FROM_BACKUP:-<not set>}"
 log "  Restore Enabled: ${RESTORE_ENABLED}"
+log "  Reset Credentials: ${RESTORE_RESET_CREDENTIALS}"
 log "  Backup Volume: ${BACKUP_VOLUME}"
 log "  Data Directory: ${CASSANDRA_DATA_DIR}"
 log "  rsync Retries: ${RESTORE_RSYNC_RETRIES}"
 log "  rsync Timeout: ${RESTORE_RSYNC_TIMEOUT_MINUTES} minutes"
 [ -n "$RESTORE_RSYNC_EXTRA_OPTS" ] && log "  rsync Extra Opts: ${RESTORE_RSYNC_EXTRA_OPTS}"
+
+if [ "$RESTORE_RESET_CREDENTIALS" = "true" ]; then
+    log ""
+    log "⚠️  CREDENTIAL RESET ENABLED"
+    log "  - system_auth keyspace will be deleted"
+    log "  - All users, roles, and permissions from backup will be lost"
+    log "  - Cassandra will recreate with cassandra/cassandra credentials"
+    [ -n "${AXONOPS_DB_USER:-}" ] && log "  - Custom user will be created: ${AXONOPS_DB_USER}"
+fi
 
 # ============================================================================
 # 2. Determine Restore Target
@@ -441,6 +452,61 @@ PERMISSIONS_DURATION=$(get_duration $PERMISSIONS_START)
 log "Total permissions time: ${PERMISSIONS_DURATION}"
 
 # ============================================================================
+# 9a. Credential Reset (Optional)
+# ============================================================================
+
+if [ "$RESTORE_RESET_CREDENTIALS" = "true" ]; then
+    log ""
+    log "========================================================================"
+    log "CREDENTIAL RESET"
+    log "========================================================================"
+    log ""
+    log "Credential reset requested - deleting system_auth keyspace data"
+    log "WARNING: All user accounts, roles, and permissions from backup will be lost"
+    log "Cassandra will recreate system_auth with default cassandra/cassandra credentials"
+
+    CREDENTIAL_RESET_START=$(date +%s)
+    SYSTEM_AUTH_DIR="${CASSANDRA_DATA_DIR}/system_auth"
+
+    if [ -d "$SYSTEM_AUTH_DIR" ]; then
+        # Get size for logging
+        SYSTEM_AUTH_SIZE=$(du -sh "$SYSTEM_AUTH_DIR" 2>/dev/null | cut -f1 || echo "unknown")
+        log "Removing system_auth directory (size: $SYSTEM_AUTH_SIZE)"
+
+        # Delete system_auth directory (CRITICAL - must succeed)
+        if ! rm -rf "$SYSTEM_AUTH_DIR" 2>&1; then
+            log_error "Failed to delete system_auth directory"
+            log_error "Credential reset failed - cannot continue"
+
+            # Write failure to semaphore
+            {
+                echo "COMPLETED=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+                echo "RESULT=failed"
+                echo "REASON=credential_reset_failed"
+                echo "BACKUP_ATTEMPTED=${BACKUP_NAME}"
+            } > /tmp/axonops-restore.done
+
+            exit 1
+        fi
+
+        log "✓ system_auth directory deleted"
+        log "  Cassandra will auto-create fresh system_auth on startup"
+        log "  Default credentials: cassandra/cassandra"
+    else
+        log "WARNING: system_auth directory not found (expected at: $SYSTEM_AUTH_DIR)"
+        log "Credential reset not needed (no system_auth in restored data)"
+    fi
+
+    # Note: Other system keyspaces (system, system_schema, etc.) are NOT altered
+    # They retain their configuration from the backup (already NetworkTopologyStrategy)
+    # Only system_auth is reset because it contains user credentials
+
+    CREDENTIAL_RESET_DURATION=$(get_duration $CREDENTIAL_RESET_START)
+    log "✓ Credential reset completed (took ${CREDENTIAL_RESET_DURATION})"
+    log ""
+fi
+
+# ============================================================================
 # 10. Validate Restored Data
 # ============================================================================
 
@@ -467,7 +533,17 @@ log "  Data size: $(du -sh "$CASSANDRA_DATA_DIR" 2>/dev/null | cut -f1 || echo '
 # ============================================================================
 
 log "Writing success semaphore..."
-write_semaphore "success" "restore_completed" "$RESTORE_TARGET"
+
+# Write success semaphore with credential reset status
+{
+    echo "COMPLETED=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+    echo "RESULT=success"
+    echo "REASON=restore_completed"
+    echo "BACKUP_RESTORED=${RESTORE_TARGET}"
+    [ "$RESTORE_RESET_CREDENTIALS" = "true" ] && echo "CREDENTIALS_RESET=true"
+} > "$SEMAPHORE_FILE"
+
+log "Semaphore written: RESULT=success, REASON=restore_completed${RESTORE_RESET_CREDENTIALS:+, CREDENTIALS_RESET=true}"
 
 # ============================================================================
 # 12. Success

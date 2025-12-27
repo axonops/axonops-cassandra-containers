@@ -998,6 +998,8 @@ docker exec axondb nodetool status
    | `BACKUP_RSYNC_TIMEOUT_MINUTES` | No | `120` | rsync timeout (large datasets) |
    | `RESTORE_FROM_BACKUP` | No | - | Backup name or `latest` |
    | `RESTORE_ENABLED` | No | `false` | Enable restore without backup name |
+   | `RESTORE_RESET_CREDENTIALS` | No | `false` | Delete system_auth on restore (reset to cassandra/cassandra) |
+   | `RSYNC_BWLIMIT_KB` | No | - | Bandwidth limit for backups in KB/s |
    | `ENABLE_SEMAPHORE_MONITOR` | No | `false` | Monitor backup/restore state |
 
    **Kubernetes Example:**
@@ -1042,7 +1044,11 @@ docker exec axondb nodetool status
    - **Hardlinks are local**: When copying backups to remote storage (S3, NFS), hardlinks become independent files (full copy)
    - **`.axonops` preservation**: Init semaphores are backed up and restored to prevent re-initialization
    - **Non-blocking restore**: Restore runs in background, container starts normally (K8s compatible)
-   - **Credentials preserved**: Custom credentials from backup are restored automatically
+   - **Credentials preserved**: Custom credentials from backup are restored automatically (unless `RESTORE_RESET_CREDENTIALS=true`)
+   - **Credential reset** (`RESTORE_RESET_CREDENTIALS=true`): Deletes all users/roles from backup
+     - Resets to cassandra/cassandra (custom user auto-created if AXONOPS_DB_USER set)
+     - All permissions and grants from backup are lost
+     - Use for prod → dev restores where credential reset is desired
 
    **Backup Location:**
    - Mount `/backup` volume for persistence
@@ -1065,6 +1071,24 @@ docker exec axondb nodetool status
 
    # List available backups
    ls -1dt /backup/data_backup-* | head -10
+
+   # Restore with credential reset (prod → dev)
+   docker run -d \
+     -v /backup:/backup \
+     -e RESTORE_FROM_BACKUP="backup-20251226-120000" \
+     -e RESTORE_RESET_CREDENTIALS=true \
+     axondb-timeseries:latest
+   # After restore: credentials are cassandra/cassandra
+
+   # Restore with credential reset + new custom user
+   docker run -d \
+     -v /backup:/backup \
+     -e RESTORE_FROM_BACKUP="backup-20251226-120000" \
+     -e RESTORE_RESET_CREDENTIALS=true \
+     -e AXONOPS_DB_USER=devuser \
+     -e AXONOPS_DB_PASSWORD=devpass123 \
+     axondb-timeseries:latest
+   # After restore: credentials are devuser/devpass123 (auto-created)
    ```
 
    **Monitoring Backups:**

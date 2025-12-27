@@ -218,7 +218,8 @@ COPY scripts/cassandra-wrapper.sh /usr/local/bin/cassandra-wrapper.sh
 COPY scripts/retention-cleanup.sh /usr/local/bin/retention-cleanup.sh
 COPY scripts/log-rotate.sh /usr/local/bin/log-rotate.sh
 COPY scripts/semaphore-monitor.sh /usr/local/bin/semaphore-monitor.sh
-RUN chmod 755 /usr/local/bin/cassandra-backup.sh /usr/local/bin/cassandra-restore.sh /usr/local/bin/backup-cron-wrapper.sh /usr/local/bin/backup-scheduler.sh /usr/local/bin/cassandra-wrapper.sh /usr/local/bin/retention-cleanup.sh /usr/local/bin/log-rotate.sh /usr/local/bin/semaphore-monitor.sh
+COPY scripts/post-restore-create-user.sh /usr/local/bin/post-restore-create-user.sh
+RUN chmod 755 /usr/local/bin/cassandra-backup.sh /usr/local/bin/cassandra-restore.sh /usr/local/bin/backup-cron-wrapper.sh /usr/local/bin/backup-scheduler.sh /usr/local/bin/cassandra-wrapper.sh /usr/local/bin/retention-cleanup.sh /usr/local/bin/log-rotate.sh /usr/local/bin/semaphore-monitor.sh /usr/local/bin/post-restore-create-user.sh
 
 # Generate comprehensive build information for runtime startup banner
 # Values are quoted for safe sourcing in bash
