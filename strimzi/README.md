@@ -166,8 +166,8 @@ To build a custom image locally for testing:
 
 ```bash
 docker build \
-  --build-arg STRIMZI_VERSION=0.45.0 \
-  --build-arg KAFKA_VERSION=3.8.0 \
+  --build-arg STRIMZI_VERSION=0.49.1 \
+  --build-arg KAFKA_VERSION=4.1.0 \
   --build-arg KAFKA_AGENT_VERSION=axon-kafka3-agent \
   --build-arg AXONOPS_REPO_FILE=axonops.repo.dev \
   --build-arg AGENT_VERSION=axon-agent \
@@ -200,22 +200,22 @@ To trigger a production build pipeline, create a tag in the following format:
 
 ```bash
 # Development build
-git tag dev/0.45.0-kafka-3.8.0-1
-git push origin dev/0.45.0-kafka-3.8.0-1
+git tag dev/0.49.1-kafka-4.1.0-1
+git push origin dev/0.49.1-kafka-4.1.0-1
 
 # Beta build
-git tag beta/0.45.0-kafka-3.8.0-1
-git push origin beta/0.45.0-kafka-3.8.0-1
+git tag beta/0.49.1-kafka-4.1.0-1
+git push origin beta/0.49.1-kafka-4.1.0-1
 
 # Production release
-git tag release/0.45.0-kafka-3.8.0-1
-git push origin release/0.45.0-kafka-3.8.0-1
+git tag release/0.49.1-kafka-4.1.0-1
+git push origin release/0.49.1-kafka-4.1.0-1
 ```
 
 **Where:**
 - `<environment>`: `dev`, `beta`, or `release`
-- `<strimzi-version>`: Strimzi operator version (e.g., `0.45.0`)
-- `<kafka-version>`: Kafka version (e.g., `3.8.0`)
+- `<strimzi-version>`: Strimzi operator version (e.g., `0.49.1`)
+- `<kafka-version>`: Kafka version (e.g., `4.1.0`)
 - `<build-number>`: Incremental build number (e.g., `1`, `2`, `3`)
 
 ## Cleanup
@@ -348,10 +348,18 @@ Key files:
 
 | Component | Version | Notes |
 |-----------|---------|-------|
-| Strimzi | 0.44.0+ | ConfigMap support requires 0.44+, KRaft mode required |
-| Kafka | 3.8.0+ | Tested with 3.8.0 and 3.9.0 |
+| Strimzi | 0.49.1 (latest) | ConfigMap support requires 0.44+, KRaft mode required |
+| Kafka | 4.1.0 (latest) | Version 0.49.1 supports Kafka 4.0.0, 4.0.1, 4.1.0 |
 | Kubernetes | 1.24+ | Any CNCF-compliant distribution |
 | AxonOps Agent | Latest | Auto-installed from repository |
+
+### Strimzi Version History
+
+| Strimzi Version | Supported Kafka Versions | Release Date |
+|-----------------|-------------------------|--------------|
+| 0.49.1 | 4.0.0, 4.0.1, 4.1.0 | Dec 2024 |
+| 0.46.0 | 3.9.0, 4.0.0 | Sep 2024 |
+| 0.45.0 | 3.8.0, 3.8.1, 3.9.0 | Jul 2024 |
 
 ## Known Limitations and TODOs
 
