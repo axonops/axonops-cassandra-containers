@@ -229,7 +229,7 @@ spec:
             kinds: [Pod]
             namespaces: [kafka,k8ssandra-operator,strimzi]
       validate:
-        message: "Only images from ghcr.io/axonops/ are allowed in the kafka namespace."
+        message: "Only images from ghcr.io/axonops/ are allowed in this namespace."
         foreach:
         - list: "request.object.spec.containers"
           deny:
