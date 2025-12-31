@@ -1,15 +1,6 @@
 name: Strimzi Publish Signed to GHCR
 
 on:
-  pull_request:
-    branches:
-      - main
-      - development
-    paths:
-      - 'strimzi/**'
-      - '!strimzi/**/*.md'
-      - '.github/workflows/strimzi-publish-signed.yml'
-      - '.github/actions/strimzi-*/**'
   workflow_dispatch:
     inputs:
       main_git_tag:
