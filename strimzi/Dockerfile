@@ -15,7 +15,7 @@ USER root
 COPY files/${AXONOPS_REPO_FILE} /etc/yum.repos.d/axonops-yum.repo
 RUN microdnf --setopt=install_weak_deps=0 --setopt=tsflags=nodocs install -y \
         ${KAFKA_AGENT_PACKAGE} \
-        ${AGENT_PACKAGE}-${AXON_AGENT_VERSION} \
+        ${AGENT_PACKAGE}-${AXON_AGENT_VERSION}-1 \
     && microdnf clean all \
     && rm -f /etc/axonops/axon-agent.yml
 
