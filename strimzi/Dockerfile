@@ -1,9 +1,16 @@
 ARG STRIMZI_VERSION=0.46.0
 ARG KAFKA_VERSION=3.9.0
+ARG STRIMZI_BASE_DIGEST=required
 
-FROM quay.io/strimzi/kafka:${STRIMZI_VERSION}-kafka-${KAFKA_VERSION}
+FROM quay.io/strimzi/kafka@${STRIMZI_BASE_DIGEST}
 
+# Re-declare ARGs after FROM (Docker ARG scope rule - ARGs before FROM only available in FROM line)
+ARG STRIMZI_VERSION
+ARG KAFKA_VERSION
+ARG STRIMZI_BASE_DIGEST
 ARG AXON_AGENT_VERSION=2.0.12
+
+RUN echo "AXONOPS_BUILD: Inheriting from strimzi/kafka:${STRIMZI_VERSION}-kafka-${KAFKA_VERSION} (digest: ${STRIMZI_BASE_DIGEST})"
 
 ARG AGENT_PACKAGE=axon-agent
 ARG KAFKA_AGENT_PACKAGE=axon-kafka3-agent
