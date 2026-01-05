@@ -37,4 +37,3 @@ go.work.sum
 **/tests/*-test-run.log
 **/tests/smoke-test-results.txt
 **/tests/smoke-output.log
-sergio-scripts/
