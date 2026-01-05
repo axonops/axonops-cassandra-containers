@@ -31,8 +31,8 @@ RUN microdnf --setopt=install_weak_deps=0 --setopt=tsflags=nodocs install -y \
 COPY files/axonops-wrapper.sh /opt/kafka/axonops-wrapper.sh
 RUN chmod 755 /opt/kafka/axonops-wrapper.sh \
  && [ -f /opt/kafka/kafka_run.sh ] && sed -i '$i source /opt/kafka/axonops-wrapper.sh' /opt/kafka/kafka_run.sh \
- && [ -f /opt/kafka/kafka_connect_mm2_shared_run.sh ] && sed -i '$i source /opt/kafka/axonops-wrapper.sh' /opt/kafka/kafka_connect_mm2_shared_run.sh \
- && [ -f /opt/kafka/kafka_mirror_maker_2_run.sh ] && sed -i '$i source /opt/kafka/axonops-wrapper.sh' /opt/kafka/kafka_mirror_maker_2_run.sh \
+#  && [ -f /opt/kafka/kafka_connect_mm2_shared_run.sh ] && sed -i '$i source /opt/kafka/axonops-wrapper.sh' /opt/kafka/kafka_connect_mm2_shared_run.sh \
+#  && [ -f /opt/kafka/kafka_mirror_maker_2_run.sh ] && sed -i '$i source /opt/kafka/axonops-wrapper.sh' /opt/kafka/kafka_mirror_maker_2_run.sh \
  && [ -f /opt/kafka/kafka_connect_run.sh ] && sed -i '$i source /opt/kafka/axonops-wrapper.sh' /opt/kafka/kafka_connect_run.sh \
  && [ -f /opt/kafka/zookeeper_run.sh ] && sed -i '2i source /opt/kafka/axonops-wrapper.sh' /opt/kafka/zookeeper_run.sh
 
