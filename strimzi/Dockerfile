@@ -39,10 +39,10 @@ RUN chmod 755 /opt/kafka/axonops-wrapper.sh \
 
 # # Setup permissions and group membership
 RUN usermod -a -G axonops kafka \
-    && touch /opt/kafka/server.log \
+    && touch /opt/kafka/server.log /opt/kafka/controller.log \
     && mkdir -p /var/log/kafka \
     && chown kafka:axonops /var/log/kafka \
-    && chown kafka:axonops /opt/kafka/server.log \
+    && chown kafka:axonops /opt/kafka/server.log /opt/kafka/controller.log \
     && chmod g+w /etc/axonops 
 
 USER kafka
