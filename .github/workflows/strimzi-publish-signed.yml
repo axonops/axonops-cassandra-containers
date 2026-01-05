@@ -91,8 +91,6 @@ env:
       "0.49.1+4.1.1": "sha256:bfbee54f85beb3731cf41483befa39d8c5ebe5db002df6265c6ea95b6a156749"
     }
 
-    }
-
 jobs:
   strimzi-validate:
     runs-on: ubuntu-latest
