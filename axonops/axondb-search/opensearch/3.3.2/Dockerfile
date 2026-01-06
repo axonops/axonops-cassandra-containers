@@ -1,7 +1,7 @@
 # Supply chain security: Use immutable digest instead of mutable tag
 # UBI 9 minimal base image digest (latest as of 2025-12-10)
 # Points to: registry.access.redhat.com/ubi9/ubi-minimal:latest
-ARG UBI9_MINIMAL_DIGEST=sha256:80f3902b6dcb47005a90e14140eef9080ccc1bb22df70ee16b27d5891524edb2
+ARG UBI9_MINIMAL_DIGEST=sha256:6fc28bcb6776e387d7a35a2056d9d2b985dc4e26031e98a2bd35a7137cd6fd71
 
 # OpenSearch version and SHA512 checksum (from official OpenSearch artifacts)
 ARG OPENSEARCH_VERSION=3.3.2
