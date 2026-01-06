@@ -17,7 +17,14 @@ else
     exit 1
 fi
 
-IMAGE_NAME=${1:-axondb-timeseries:latest}
+
+TOKEN=$(curl -s "https://sso.redhat.com/auth/realms/rhcc/protocol/redhat-docker-v2/auth?service=docker-registry&client_id=curl&scope=repository:ubi9/ubi-minimal:pull" | jq -r .access_token)
+DIGEST=$(curl -s -H "Authorization: Bearer $TOKEN" \
+     -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+     "https://registry.access.redhat.com/v2/ubi9/ubi-minimal/manifests/latest" | jq ".manifests[] | select(.platform.architecture == \"$TARGETARCH\")" | jq -r .digest)
+
+
+IMAGE_NAME=${1:-axondb-search:latest}
 shift
 
 echo "=========================================="
@@ -33,7 +40,7 @@ echo ""
 podman build \
     --platform "$PLATFORM" \
     --build-arg TARGETARCH="$TARGETARCH" \
-    --build-arg CQLAI_VERSION=0.0.31 \
+    --build-arg UBI9_MINIMAL_DIGEST=$DIGEST \
     -t $IMAGE_NAME \
     "$@" \
     .
@@ -41,5 +48,5 @@ podman build \
 echo ""
 echo "=========================================="
 echo "Build complete!"
-echo "Image tagged: axondb-timeseries:latest"
+echo "Image tagged: ${IMAGE_NAME}"
 echo "=========================================="

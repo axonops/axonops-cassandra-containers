@@ -1,9 +1,9 @@
 # Supply chain security: Use immutable digest instead of mutable tag
 # UBI 9 minimal base image digest (latest as of 2025-12-10)
 # Points to: registry.access.redhat.com/ubi9/ubi-minimal:latest
-ARG UBI9_MINIMAL_DIGEST=sha256:80f3902b6dcb47005a90e14140eef9080ccc1bb22df70ee16b27d5891524edb2
+ARG UBI9_MINIMAL_DIGEST=sha256:6db3a58e284f9df960d92299c61ae51065742fb309b8696706cc54f7b1384161
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal@${UBI9_MINIMAL_DIGEST}
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 
 # Re-declare ARGs after FROM (Docker ARG scope rule)
 ARG UBI9_MINIMAL_DIGEST
@@ -56,8 +56,8 @@ RUN echo "Updating all packages to latest versions..." && \
     microdnf clean all && \
     rm -rf /var/cache/yum /var/cache/dnf
 
-RUN echo "Installing required tools (curl, jq)..." && \
-    microdnf install -y curl jq && \
+RUN echo "Installing required tools (jq)..." && \
+    microdnf install -y jq && \
     microdnf clean all
 
 # Copy backup script

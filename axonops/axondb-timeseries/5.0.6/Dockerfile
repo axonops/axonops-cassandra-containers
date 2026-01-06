@@ -1,7 +1,7 @@
 # Supply chain security: Use immutable digest instead of mutable tag
 # UBI 9 minimal base image digest (latest as of 2025-12-10)
 # Points to: registry.access.redhat.com/ubi9/ubi-minimal:latest
-ARG UBI9_MINIMAL_DIGEST=sha256:80f3902b6dcb47005a90e14140eef9080ccc1bb22df70ee16b27d5891524edb2
+ARG UBI9_MINIMAL_DIGEST=sha256:7c99b766f8b14b102eb506edd226e02e25b84e87459735f13beee8888b9e1b4d
 
 # Cassandra version and SHA512 checksum (from official Apache Cassandra)
 ARG CASSANDRA_VERSION=5.0.6
