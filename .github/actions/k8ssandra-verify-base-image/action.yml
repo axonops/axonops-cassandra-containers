@@ -1,0 +1,65 @@
+name: 'K8ssandra Verify Base Image Version'
+description: 'Verifies the correct k8ssandra base image version was used during build'
+inputs:
+  cassandra_version:
+    description: 'Expected Cassandra version (e.g., 5.0.6)'
+    required: true
+  base_version:
+    description: 'Base version for directory path (e.g., 5.0)'
+    required: true
+  cqlai_version:
+    description: 'cqlai version to install'
+    required: true
+  k8ssandra_digests_json:
+    description: 'JSON mapping of Cassandra versions to k8ssandra base image digests'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Verify correct base image version in build
+      shell: bash
+      run: |
+        echo "=== Verifying base image version in build ==="
+
+        # Find the composite key for this Cassandra version
+        COMPOSITE_KEY=$(echo '${{ inputs.k8ssandra_digests_json }}' | jq -r 'keys[] | select(startswith("${{ inputs.cassandra_version }}+"))')
+
+        if [ -z "$COMPOSITE_KEY" ]; then
+          echo "ERROR: No k8ssandra version found for Cassandra ${{ inputs.cassandra_version }}"
+          echo "Available versions:"
+          echo '${{ inputs.k8ssandra_digests_json }}' | jq -r 'keys[]'
+          exit 1
+        fi
+
+        # Get digest for this composite key
+        DIGEST=$(echo '${{ inputs.k8ssandra_digests_json }}' | jq -r '.["'"$COMPOSITE_KEY"'"]')
+
+        # Extract k8ssandra API version from composite key FIRST
+        K8S_API_VERSION=$(echo "$COMPOSITE_KEY" | cut -d+ -f2)
+
+        echo "Using composite key: $COMPOSITE_KEY"
+        echo "Using k8ssandra API version: v$K8S_API_VERSION"
+        echo "Using k8ssandra base digest: $DIGEST"
+
+        # Rebuild with output to capture logs
+        docker build \
+          --build-arg CASSANDRA_VERSION=${{ inputs.cassandra_version }} \
+          --build-arg MAJOR_VERSION=${{ inputs.base_version }} \
+          --build-arg K8SSANDRA_BASE_DIGEST=$DIGEST \
+          --build-arg K8SSANDRA_API_VERSION=$K8S_API_VERSION \
+          --build-arg CQLAI_VERSION=${{ inputs.cqlai_version }} \
+          -t axonops-cassandra:verify \
+          ./k8ssandra/${{ inputs.base_version }} 2>&1 | tee /tmp/build-output.log
+
+        # Check for version echo in build output (now includes k8ssandra API version)
+        if ! grep -q "AXONOPS_BUILD: Inheriting from k8ssandra/cass-management-api:${{ inputs.cassandra_version }}-ubi-v${K8S_API_VERSION}" /tmp/build-output.log; then
+          echo "ERROR: Build did not use correct base image!"
+          echo "Expected: k8ssandra/cass-management-api:${{ inputs.cassandra_version }}-ubi-v${K8S_API_VERSION}"
+          echo ""
+          echo "AXONOPS_BUILD logs:"
+          grep "AXONOPS_BUILD" /tmp/build-output.log || echo "(no AXONOPS_BUILD messages found)"
+          exit 1
+        fi
+
+        echo "✓ Verified building from k8ssandra/cass-management-api:${{ inputs.cassandra_version }}-ubi-v${K8S_API_VERSION}"
