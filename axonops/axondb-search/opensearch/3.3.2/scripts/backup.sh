@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+set -x
 
 # Backup script for OpenSearch snapshots
 # - Checks whether a snapshot repository is configured according to env vars
@@ -14,17 +15,17 @@ set -euo pipefail
 # OpenSearch connection - HTTPS by default for secure communication
 : "${AXONOPS_SEARCH_URL:=https://localhost:9200}"
 : "${AXONOPS_SEARCH_SNAPSHOT_REPO:=axon-backup-repo}"
-: "${AXONOPS_SEARCH_BACKUP_TARGET:-local}"
+: "${AXONOPS_SEARCH_BACKUP_TARGET:=local}"
 
 # Authentication credentials (required for secured clusters)
-: "${AXONOPS_SEARCH_USER:=}"
-: "${AXONOPS_SEARCH_PASSWORD:=}"
+: "${AXONOPS_SEARCH_USER:=admin}"
+: "${AXONOPS_SEARCH_PASSWORD:=MyS3cur3P@ss2025}"
 
 # TLS/SSL options
 : "${AXONOPS_SEARCH_CA_CERT:=}"           # Path to CA certificate file
 : "${AXONOPS_SEARCH_CLIENT_CERT:=}"       # Path to client certificate (for mTLS)
 : "${AXONOPS_SEARCH_CLIENT_KEY:=}"        # Path to client key (for mTLS)
-: "${AXONOPS_SEARCH_SKIP_TLS_VERIFY:=false}"  # Set to 'true' to skip TLS verification (NOT recommended for production)
+: "${AXONOPS_SEARCH_SKIP_TLS_VERIFY:=true}"  # Set to 'true' to skip TLS verification (NOT recommended for production)
 
 # Snapshot options
 : "${AXONOPS_SEARCH_SNAPSHOT_INDICES:=_all}"  # Indices to include in snapshot
@@ -104,7 +105,8 @@ http() {
 }
 
 http_code() {
-  # Returns body and sets HTTP_CODE variable
+  # Outputs: HTTP_CODE on first line, then body on subsequent lines
+  # Caller must parse: HTTP_CODE="${result%%$'\n'*}" and body="${result#*$'\n'}"
   local method="$1" path="$2" data="${3:-}"
   local url="${AXONOPS_SEARCH_URL%/}${path}"
   local resp
@@ -120,12 +122,22 @@ http_code() {
       -X "$method" -w "\n%{http_code}" "$url" 2>&1) || true
   fi
 
-  HTTP_CODE="${resp##*$'\n'}"
-  printf "%s" "${resp%$'\n'*}"
+  local code="${resp##*$'\n'}"
+  local body="${resp%$'\n'*}"
+  # Output code first, then body (separated by newline)
+  printf "%s\n%s" "$code" "$body"
 }
 
 has_jq() {
   command -v jq >/dev/null 2>&1
+}
+
+# Helper to parse http_code output
+# Sets HTTP_CODE and HTTP_BODY variables
+parse_http_response() {
+  local result="$1"
+  HTTP_CODE="${result%%$'\n'*}"
+  HTTP_BODY="${result#*$'\n'}"
 }
 
 wait_for_opensearch() {
@@ -134,7 +146,10 @@ wait_for_opensearch() {
   local attempt=0
 
   while [[ $attempt -lt $max_attempts ]]; do
-    if http_code GET "/_cluster/health" >/dev/null 2>&1 && [[ "${HTTP_CODE}" == "200" ]]; then
+    local result
+    result=$(http_code GET "/_cluster/health" 2>/dev/null) || true
+    parse_http_response "$result"
+    if [[ "${HTTP_CODE}" == "200" ]]; then
       log "OpenSearch is available"
       return 0
     fi
@@ -204,10 +219,11 @@ build_repo_payload() {
 }
 
 get_existing_repo() {
-  local body
-  body=$(http_code GET "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}")
+  local result body
+  result=$(http_code GET "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}")
+  parse_http_response "$result"
   if [[ "${HTTP_CODE}" == "200" ]]; then
-    printf '%s' "$body"
+    printf '%s' "$HTTP_BODY"
     return 0
   fi
   return 1
@@ -229,11 +245,12 @@ create_or_update_repo() {
 
       if [[ "$existing_type" != "$desired_type" ]] || [[ "$existing_settings" != "$desired_settings" ]]; then
         log "Repository exists but differs from desired configuration. Updating repository..."
-        local resp
-        resp=$(http_code PUT "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}" "$payload")
+        local result
+        result=$(http_code PUT "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}" "$payload")
+        parse_http_response "$result"
         if [[ "${HTTP_CODE}" != "200" && "${HTTP_CODE}" != "201" ]]; then
           log_error "Failed to update repository: HTTP ${HTTP_CODE}"
-          log_error "Response: ${resp}"
+          log_error "Response: ${HTTP_BODY}"
           exit 3
         fi
         log "Repository updated."
@@ -245,11 +262,12 @@ create_or_update_repo() {
     fi
   else
     log "Repository not found; creating..."
-    local resp
-    resp=$(http_code PUT "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}" "$payload")
+    local result
+    result=$(http_code PUT "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}" "$payload")
+    parse_http_response "$result"
     if [[ "${HTTP_CODE}" != "200" && "${HTTP_CODE}" != "201" ]]; then
       log_error "Failed to create repository: HTTP ${HTTP_CODE}"
-      log_error "Response: ${resp}"
+      log_error "Response: ${HTTP_BODY}"
       exit 3
     fi
     log "Repository created."
@@ -257,11 +275,12 @@ create_or_update_repo() {
 
   # Verify repository is accessible
   log "Verifying repository..."
-  local verify_resp
-  verify_resp=$(http_code POST "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}/_verify")
+  local verify_result
+  verify_result=$(http_code POST "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}/_verify")
+  parse_http_response "$verify_result"
   if [[ "${HTTP_CODE}" != "200" ]]; then
     log_error "Repository verification failed: HTTP ${HTTP_CODE}"
-    log_error "Response: ${verify_resp}"
+    log_error "Response: ${HTTP_BODY}"
     exit 3
   fi
   log "Repository verified successfully."
@@ -286,27 +305,28 @@ create_snapshot() {
 EOF
 )
 
-  local resp
-  resp=$(http_code PUT "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}/${name}?wait_for_completion=true" "$body")
+  local result
+  result=$(http_code PUT "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}/${name}?wait_for_completion=true" "$body")
+  parse_http_response "$result"
 
   if [[ "${HTTP_CODE}" != "200" && "${HTTP_CODE}" != "201" ]]; then
     log_error "Snapshot failed: HTTP ${HTTP_CODE}"
-    log_error "Response: ${resp}"
+    log_error "Response: ${HTTP_BODY}"
     exit 4
   fi
 
   # Check snapshot state if jq is available
   if has_jq; then
     local state
-    state=$(printf '%s' "$resp" | jq -r '.snapshot.state // "UNKNOWN"')
+    state=$(printf '%s' "$HTTP_BODY" | jq -r '.snapshot.state // "UNKNOWN"')
     if [[ "$state" != "SUCCESS" ]]; then
       log_error "Snapshot completed with state: ${state}"
-      log_error "Response: ${resp}"
+      log_error "Response: ${HTTP_BODY}"
       exit 4
     fi
     local shards_total shards_failed
-    shards_total=$(printf '%s' "$resp" | jq -r '.snapshot.shards.total // 0')
-    shards_failed=$(printf '%s' "$resp" | jq -r '.snapshot.shards.failed // 0')
+    shards_total=$(printf '%s' "$HTTP_BODY" | jq -r '.snapshot.shards.total // 0')
+    shards_failed=$(printf '%s' "$HTTP_BODY" | jq -r '.snapshot.shards.failed // 0')
     log "Snapshot '${name}' completed successfully. State: ${state}, Shards: ${shards_total} total, ${shards_failed} failed."
   else
     log "Snapshot '${name}' completed successfully."
@@ -327,8 +347,9 @@ cleanup_old_snapshots() {
   local retention="${AXONOPS_SEARCH_SNAPSHOT_RETENTION_COUNT}"
   log "Cleaning up old snapshots, keeping last ${retention} snapshots..."
 
-  local snapshots_resp
-  snapshots_resp=$(http_code GET "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}/_all")
+  local result
+  result=$(http_code GET "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}/_all")
+  parse_http_response "$result"
 
   if [[ "${HTTP_CODE}" != "200" ]]; then
     log_error "Failed to list snapshots: HTTP ${HTTP_CODE}"
@@ -337,7 +358,7 @@ cleanup_old_snapshots() {
 
   # Get snapshots sorted by start_time, filter by prefix, and identify ones to delete
   local snapshots_to_delete
-  snapshots_to_delete=$(printf '%s' "$snapshots_resp" | jq -r --arg prefix "${AXONOPS_SEARCH_SNAPSHOT_PREFIX}" --argjson keep "$retention" '
+  snapshots_to_delete=$(printf '%s' "$HTTP_BODY" | jq -r --arg prefix "${AXONOPS_SEARCH_SNAPSHOT_PREFIX}" --argjson keep "$retention" '
     .snapshots
     | map(select(.snapshot | startswith($prefix)))
     | sort_by(.start_time_in_millis)
@@ -355,8 +376,9 @@ cleanup_old_snapshots() {
   while IFS= read -r snapshot_name; do
     [[ -z "$snapshot_name" ]] && continue
     log "Deleting old snapshot: ${snapshot_name}"
-    local delete_resp
-    delete_resp=$(http_code DELETE "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}/${snapshot_name}")
+    local delete_result
+    delete_result=$(http_code DELETE "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}/${snapshot_name}")
+    parse_http_response "$delete_result"
     if [[ "${HTTP_CODE}" == "200" ]]; then
       log "Deleted snapshot: ${snapshot_name}"
       count=$((count + 1))
@@ -370,8 +392,9 @@ cleanup_old_snapshots() {
 
 list_snapshots() {
   log "Listing snapshots in repository '${AXONOPS_SEARCH_SNAPSHOT_REPO}'..."
-  local resp
-  resp=$(http_code GET "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}/_all")
+  local result
+  result=$(http_code GET "/_snapshot/${AXONOPS_SEARCH_SNAPSHOT_REPO}/_all")
+  parse_http_response "$result"
 
   if [[ "${HTTP_CODE}" != "200" ]]; then
     log_error "Failed to list snapshots: HTTP ${HTTP_CODE}"
@@ -379,9 +402,9 @@ list_snapshots() {
   fi
 
   if has_jq; then
-    printf '%s' "$resp" | jq -r '.snapshots[] | "\(.snapshot)\t\(.state)\t\(.start_time)"'
+    printf '%s' "$HTTP_BODY" | jq -r '.snapshots[] | "\(.snapshot)\t\(.state)\t\(.start_time)"'
   else
-    printf '%s\n' "$resp"
+    printf '%s\n' "$HTTP_BODY"
   fi
 }
 

@@ -174,10 +174,6 @@ spec:
                   readOnly: true
                 {{- end }}
                 {{- end }}
-                {{- if eq .Values.backups.target.type "local" }}
-                - name: backup-storage
-                  mountPath: {{ .Values.backups.target.local.path }}
-                {{- end }}
               {{- end }}
           {{- if or .Values.tls.enabled (eq .Values.backups.target.type "local") }}
           volumes:
@@ -191,11 +187,6 @@ spec:
               secret:
                 secretName: {{ .Values.tls.manual.existingSecret }}
             {{- end }}
-            {{- end }}
-            {{- if eq .Values.backups.target.type "local" }}
-            - name: backup-storage
-              persistentVolumeClaim:
-                claimName: {{ .Values.backups.target.local.existingClaim | default (printf "%s-backup" (include "opensearch.uname" .)) }}
             {{- end }}
           {{- end }}
           {{- with .Values.backups.nodeSelector }}

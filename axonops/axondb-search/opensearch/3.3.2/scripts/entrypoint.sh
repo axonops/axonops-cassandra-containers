@@ -183,6 +183,14 @@ if [ -n "$OPENSEARCH_SECURITY_ADMIN_DN" ]; then
     _sed-in-place "/etc/opensearch/opensearch.yml" -r 's|^  - ".*axondbsearch.*"|  - "'"$OPENSEARCH_SECURITY_ADMIN_DN"'"|'
 fi
 
+: "${AXONOPS_SEARCH_SNAPSHOT_REPO:=axon-backup-repo}"
+: "${AXONOPS_SEARCH_BACKUP_TARGET:=local}"
+: "${AXONOPS_SEARCH_BACKUS_PATH:=/mnt/backups}"
+
+if [ $AXONOPS_SEARCH_BACKUP_TARGET = "local" ]; then
+    echo "path.repo: [\"$AXONOPS_SEARCH_BACKUS_PATH\"]" >> "/etc/opensearch/opensearch.yml"
+fi
+
 # Apply security nodes DN if env var set (for custom certificate scenarios)
 # Supports multiple DNs separated by semicolon (;)
 # Example: "CN=*.example.svc.cluster.local;CN=node-1;CN=node-2"

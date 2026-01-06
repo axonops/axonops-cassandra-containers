@@ -5,7 +5,8 @@ ARG UBI9_MINIMAL_DIGEST=sha256:80f3902b6dcb47005a90e14140eef9080ccc1bb22df70ee16
 
 # OpenSearch version and SHA512 checksum (from official OpenSearch artifacts)
 ARG OPENSEARCH_VERSION=3.3.2
-ARG OPENSEARCH_SHA512=68dc91ada02bda29a1efed6ef9916d893e58eef42e20482a6bdb1aab21c2fae490ef198a815b4ab8bcbcc87e44ce272b5943d8f67dcf37bb432e0205031a94e4
+ARG OPENSEARCH_SHA512_AMD64=68dc91ada02bda29a1efed6ef9916d893e58eef42e20482a6bdb1aab21c2fae490ef198a815b4ab8bcbcc87e44ce272b5943d8f67dcf37bb432e0205031a94e4
+ARG OPENSEARCH_SHA512_ARM64=ab055a9192b04be020272a7769801f041c28ad9e12849d54c5ed96b844692b8fcf2ab66ae91f761cc052d3f19777a4a49c43fa81a7ffb037cb2afbe62c4a8dec
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal@${UBI9_MINIMAL_DIGEST}
 
@@ -13,7 +14,8 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal@${UBI9_MINIMAL_DIGEST}
 ARG UBI9_MINIMAL_DIGEST
 ARG TARGETARCH
 ARG OPENSEARCH_VERSION
-ARG OPENSEARCH_SHA512
+ARG OPENSEARCH_SHA512_AMD64
+ARG OPENSEARCH_SHA512_ARM64
 
 # Build metadata arguments (provided by CI/CD or set to defaults for local builds)
 ARG BUILD_DATE=unknown
@@ -104,7 +106,16 @@ RUN microdnf install -y --nodocs \
 # Download and install OpenSearch with SHA512 verification
 RUN mkdir -p "$OPENSEARCH_HOME" /licenses && \
     cd /tmp && \
-    OPENSEARCH_TARBALL="opensearch-${OPENSEARCH_VERSION}-linux-x64.tar.gz" && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        OPENSEARCH_TARBALL="opensearch-${OPENSEARCH_VERSION}-linux-x64.tar.gz"; \
+        OPENSEARCH_SHA512=$OPENSEARCH_SHA512_AMD64; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        OPENSEARCH_TARBALL="opensearch-${OPENSEARCH_VERSION}-linux-arm64.tar.gz"; \
+        OPENSEARCH_SHA512=$OPENSEARCH_SHA512_ARM64; \
+    else \
+        echo "Invalid arch ${ARCH}" && exit 1; \
+    fi && \
     echo "Downloading OpenSearch ${OPENSEARCH_VERSION} from official artifacts..." && \
     wget -q "https://artifacts.opensearch.org/releases/bundle/opensearch/${OPENSEARCH_VERSION}/${OPENSEARCH_TARBALL}" && \
     echo "${OPENSEARCH_SHA512}  ${OPENSEARCH_TARBALL}" | sha512sum -c - && \
@@ -112,12 +123,9 @@ RUN mkdir -p "$OPENSEARCH_HOME" /licenses && \
     tar -xzf "${OPENSEARCH_TARBALL}" --strip-components=1 -C "$OPENSEARCH_HOME" && \
     rm "${OPENSEARCH_TARBALL}" && \
     cp "$OPENSEARCH_HOME/LICENSE.txt" /licenses/LICENSE.txt && \
-    # Move config directory to /etc/opensearch
     mv "$OPENSEARCH_HOME/config" /etc/opensearch && \
     ln -s /etc/opensearch "$OPENSEARCH_HOME/config" && \
-    # Remove data and logs directories (will be volumes)
     rm -rf "$OPENSEARCH_HOME/data" "$OPENSEARCH_HOME/logs" && \
-    # Set ownership
     chown -R opensearch:root "$OPENSEARCH_HOME" /etc/opensearch /licenses && \
     rm -rf /tmp/*
 
