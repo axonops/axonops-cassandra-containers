@@ -100,6 +100,7 @@ jobs:
             tar zxf "${tarball}" -C ./axonops/axondb-search/opensearch/${OPENSEARCH_VERSION}/${target} --strip-components=1
             echo "✓ Verified and extracted: ${tarball}"
             rm -f "${tarball}"
+          }
 
           # Set checksums based on OpenSearch version
           case "${OPENSEARCH_VERSION}" in
