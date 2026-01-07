@@ -80,7 +80,7 @@ print_startup_banner() {
 print_startup_banner
 
 # Export OpenSearch paths
-export OPENSEARCH_HOME=${OPENSEARCH_HOME:-/opt/opensearch}
+export OPENSEARCH_HOME=${OPENSEARCH_HOME:-/usr/share/opensearch}
 export OPENSEARCH_PATH_CONF=${OPENSEARCH_PATH_CONF:-/etc/opensearch}
 export OPENSEARCH_DATA_DIR=${OPENSEARCH_DATA_DIR:-/var/lib/opensearch}
 export OPENSEARCH_LOG_DIR=${OPENSEARCH_LOG_DIR:-/var/log/opensearch}

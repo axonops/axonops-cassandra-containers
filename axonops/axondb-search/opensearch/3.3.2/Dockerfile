@@ -68,7 +68,7 @@ RUN echo "Updating all packages to latest versions..." && \
     rm -rf /var/cache/yum /var/cache/dnf
 
 # OpenSearch environment
-ENV OPENSEARCH_HOME=/opt/opensearch
+ENV OPENSEARCH_HOME=/usr/share/opensearch
 ENV OPENSEARCH_PATH_CONF=/etc/opensearch
 ENV OPENSEARCH_DATA_DIR=/var/lib/opensearch
 ENV OPENSEARCH_LOG_DIR=/var/log/opensearch
@@ -113,64 +113,22 @@ COPY --chown=opensearch:root . /tmp/opensearch-build/
 # Move the correct architecture to the final location
 RUN if [ "${TARGETARCH}" = "amd64" ]; then \
         ARCH_DIR="x86_64"; \
+        RPM_ARCH="x86"; \
     elif [ "${TARGETARCH}" = "arm64" ]; then \
         ARCH_DIR="aarch64"; \
+        RPM_ARCH="arm64"; \
     else \
         echo "ERROR: Unsupported TARGETARCH: ${TARGETARCH}" && exit 1; \
     fi && \
     echo "Installing OpenSearch for architecture: ${TARGETARCH} from ${ARCH_DIR}" && \
-    echo "Checking /tmp/opensearch-build structure:" && \
-    ls -la /tmp/opensearch-build/ | head -5 && \
-    echo "Checking architecture directory ${ARCH_DIR}:" && \
-    ls -la /tmp/opensearch-build/${ARCH_DIR}/ | head -10 && \
-    if [ -d "/tmp/opensearch-build/${ARCH_DIR}" ] && [ -f "/tmp/opensearch-build/${ARCH_DIR}/LICENSE.txt" ]; then \
-        echo "Found OpenSearch files in ${ARCH_DIR}, copying contents to $OPENSEARCH_HOME" && \
-        # Copy all contents of the architecture directory to OPENSEARCH_HOME
-        # Using cp -r to preserve structure and handle existing home directory files
-        cp -r /tmp/opensearch-build/${ARCH_DIR}/* "$OPENSEARCH_HOME"/ && \
-        echo "Verifying copy - contents of $OPENSEARCH_HOME:" && \
-        ls -la "$OPENSEARCH_HOME" | head -10 && \
-        # Verify LICENSE.txt is now in the right place
-        if [ -f "$OPENSEARCH_HOME/LICENSE.txt" ]; then \
-            echo "✓ LICENSE.txt successfully copied to $OPENSEARCH_HOME"; \
-        else \
-            echo "ERROR: LICENSE.txt not found after copy!" && \
-            echo "Contents of source directory:" && \
-            ls -la "/tmp/opensearch-build/${ARCH_DIR}/" | head -10 && \
-            exit 1; \
-        fi && \
-        chown -R opensearch:root "$OPENSEARCH_HOME"; \
-    else \
-        echo "ERROR: OpenSearch files not found in /tmp/opensearch-build/${ARCH_DIR}" && \
-        echo "Available structure:" && \
-        find /tmp/opensearch-build -type f -name "LICENSE.txt" 2>/dev/null || echo "No LICENSE.txt found" && \
-        ls -la /tmp/opensearch-build/ && \
-        exit 1; \
-    fi && \
-    rm -rf /tmp/opensearch-build
-
-# Download and install OpenSearch with SHA512 verification
-RUN mkdir -p /licenses && \
-    cp "$OPENSEARCH_HOME/LICENSE.txt" /licenses/LICENSE.txt && \
-    mv "$OPENSEARCH_HOME/config" /etc/opensearch && \
-    ln -s /etc/opensearch "$OPENSEARCH_HOME/config" && \
-    rm -rf "$OPENSEARCH_HOME/data" "$OPENSEARCH_HOME/logs" && \
-    chown -R opensearch:root "$OPENSEARCH_HOME" /etc/opensearch /licenses && \
-    rm -rf /tmp/*
+    OPENSEARCH_INITIAL_ADMIN_PASSWORD='MyS3cur3P@ss2025' \
+    rpm -Uvh https://artifacts.opensearch.org/releases/bundle/opensearch/${OPENSEARCH_VERSION}/opensearch-${OPENSEARCH_VERSION}-linux-${RPM_ARCH}.rpm
 
 # Overlay our custom config files to /etc/opensearch (before SSL setup)
 COPY --chown=opensearch:root config/jvm.options /etc/opensearch/jvm.options
 COPY --chown=opensearch:root config/log4j2.properties /etc/opensearch/log4j2.properties
 
-# Install demo SSL configuration and delete demo certs in ONE layer
-# Certificates will be generated at RUNTIME (not build time) to avoid Trivy secret detection
-# Demo script sets up security infrastructure, then we delete demo certs
-RUN cd ${OPENSEARCH_HOME} && \
-    DISABLE_INSTALL_DEMO_CONFIG=false \
-    OPENSEARCH_INITIAL_ADMIN_PASSWORD='MyS3cur3P@ss2025' \
-    bash ${OPENSEARCH_HOME}/plugins/opensearch-security/tools/install_demo_configuration.sh -y -i -s && \
-    chown -R opensearch:root /etc/opensearch && \
-    echo "Demo SSL infrastructure created" && \
+RUN echo "Demo SSL infrastructure created" && \
     rm -f /etc/opensearch/esnode.pem \
           /etc/opensearch/esnode-key.pem \
           /etc/opensearch/kirk.pem \
@@ -184,25 +142,6 @@ RUN cd ${OPENSEARCH_HOME} && \
 # Copy certificate generation script (will be run at container startup)
 COPY scripts/generate-certs.sh /usr/local/bin/generate-certs.sh
 RUN chmod 755 /usr/local/bin/generate-certs.sh
-
-# Now overlay our customized opensearch.yml and security configs
-# This updates the security plugin to use our AxonOps certificates instead of demo certs
-COPY --chown=opensearch:root config/opensearch.yml /etc/opensearch/opensearch.yml
-COPY --chown=opensearch:root config/security/action_groups.yml /etc/opensearch/opensearch-security/action_groups.yml
-COPY --chown=opensearch:root config/security/allowlist.yml /etc/opensearch/opensearch-security/allowlist.yml
-COPY --chown=opensearch:root config/security/audit.yml /etc/opensearch/opensearch-security/audit.yml
-COPY --chown=opensearch:root config/security/config.yml /etc/opensearch/opensearch-security/config.yml
-COPY --chown=opensearch:root config/security/internal_users.yml /etc/opensearch/opensearch-security/internal_users.yml
-COPY --chown=opensearch:root config/security/nodes_dn.yml /etc/opensearch/opensearch-security/nodes_dn.yml
-COPY --chown=opensearch:root config/security/roles.yml /etc/opensearch/opensearch-security/roles.yml
-COPY --chown=opensearch:root config/security/roles_mapping.yml /etc/opensearch/opensearch-security/roles_mapping.yml
-COPY --chown=opensearch:root config/security/tenants.yml /etc/opensearch/opensearch-security/tenants.yml
-
-# Create data and log directories
-RUN mkdir -p ${OPENSEARCH_DATA_DIR} ${OPENSEARCH_LOG_DIR} && \
-    chown -R opensearch:root ${OPENSEARCH_DATA_DIR} ${OPENSEARCH_LOG_DIR} && \
-    chmod 775 ${OPENSEARCH_DATA_DIR} ${OPENSEARCH_LOG_DIR} && \
-    chmod a+rwX ${OPENSEARCH_HOME} /etc/opensearch
 
 # Set JAVA_HOME to bundled JDK
 ENV JAVA_HOME=${OPENSEARCH_HOME}/jdk
