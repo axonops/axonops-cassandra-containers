@@ -124,10 +124,21 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then \
     echo "Checking architecture directory ${ARCH_DIR}:" && \
     ls -la /tmp/opensearch-build/${ARCH_DIR}/ | head -10 && \
     if [ -d "/tmp/opensearch-build/${ARCH_DIR}" ] && [ -f "/tmp/opensearch-build/${ARCH_DIR}/LICENSE.txt" ]; then \
-        echo "Found OpenSearch files in ${ARCH_DIR}, moving to $OPENSEARCH_HOME" && \
-        mv "/tmp/opensearch-build/${ARCH_DIR}" "$OPENSEARCH_HOME" && \
-        echo "Verifying move - contents of $OPENSEARCH_HOME:" && \
+        echo "Found OpenSearch files in ${ARCH_DIR}, copying contents to $OPENSEARCH_HOME" && \
+        # Copy all contents of the architecture directory to OPENSEARCH_HOME
+        # Using cp -r to preserve structure and handle existing home directory files
+        cp -r /tmp/opensearch-build/${ARCH_DIR}/* "$OPENSEARCH_HOME"/ && \
+        echo "Verifying copy - contents of $OPENSEARCH_HOME:" && \
         ls -la "$OPENSEARCH_HOME" | head -10 && \
+        # Verify LICENSE.txt is now in the right place
+        if [ -f "$OPENSEARCH_HOME/LICENSE.txt" ]; then \
+            echo "✓ LICENSE.txt successfully copied to $OPENSEARCH_HOME"; \
+        else \
+            echo "ERROR: LICENSE.txt not found after copy!" && \
+            echo "Contents of source directory:" && \
+            ls -la "/tmp/opensearch-build/${ARCH_DIR}/" | head -10 && \
+            exit 1; \
+        fi && \
         chown -R opensearch:root "$OPENSEARCH_HOME"; \
     else \
         echo "ERROR: OpenSearch files not found in /tmp/opensearch-build/${ARCH_DIR}" && \
