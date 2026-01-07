@@ -45,6 +45,17 @@ jobs:
           echo "opensearch_version=${OPENSEARCH_VER}" >> $GITHUB_OUTPUT
           echo "✓ OpenSearch version: ${OPENSEARCH_VER}"
 
+      - name: Maximize Build Space
+        uses: easimon/maximize-build-space@v10
+        with:
+          root-reserve-mb: 2048
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+
       - name: Build image for testing
         uses: docker/build-push-action@v5
         with:
@@ -62,8 +73,8 @@ jobs:
             GITHUB_ACTOR=GitHub Actions
             IS_PRODUCTION_RELEASE=false
             IMAGE_FULL_NAME=ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.opensearch_version }}-${{ inputs.container_version }}
-          # cache-from: type=gha
-          # cache-to: type=gha,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Start container and wait for services
         uses: ./.github/actions/axondb-search-start-and-wait
@@ -177,6 +188,17 @@ jobs:
           OPENSEARCH_VER=$(grep "^ARG OPENSEARCH_VERSION=" axonops/axondb-search/opensearch/3.3.2/Dockerfile | cut -d'=' -f2)
           echo "opensearch_version=${OPENSEARCH_VER}" >> $GITHUB_OUTPUT
           echo "✓ OpenSearch version: ${OPENSEARCH_VER}"
+
+      - name: Maximize Build Space
+        uses: easimon/maximize-build-space@v10
+        with:
+          root-reserve-mb: 2048
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
 
       - name: Build and push Docker image (multi-arch)
         id: build
