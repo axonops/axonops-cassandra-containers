@@ -44,7 +44,7 @@ jobs:
           context: ./axonops/axondb-search/opensearch/3.3.2
           file: ./axonops/axondb-search/opensearch/3.3.2/Dockerfile.backups
           platforms: linux/amd64,linux/arm64
-          load: true
+          load: false
           tags: axondb-search-backups:test
           build-args: |
             BUILD_DATE=${{ github.event.repository.updated_at }}
