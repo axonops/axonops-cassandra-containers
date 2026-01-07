@@ -73,6 +73,11 @@ jobs:
         with:
           install: true
 
+      - name: Debug
+        run: |
+          echo ${{ matrix.opensearch_version }}
+          ls -l ./axonops/axondb-search/opensearch/${{ matrix.opensearch_version }}
+
       - name: Build image for testing
         uses: docker/build-push-action@v5
         with:
