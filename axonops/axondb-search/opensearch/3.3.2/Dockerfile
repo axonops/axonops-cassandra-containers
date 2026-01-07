@@ -10,8 +10,6 @@ ENV UBI9_MINIMAL_DIGEST=sha256:6fc28bcb6776e387d7a35a2056d9d2b985dc4e26031e98a2b
 
 # OpenSearch version and SHA512 checksum (from official OpenSearch artifacts)
 ARG OPENSEARCH_VERSION=3.3.2
-ARG OPENSEARCH_SHA512_AMD64=68dc91ada02bda29a1efed6ef9916d893e58eef42e20482a6bdb1aab21c2fae490ef198a815b4ab8bcbcc87e44ce272b5943d8f67dcf37bb432e0205031a94e4
-ARG OPENSEARCH_SHA512_ARM64=ab055a9192b04be020272a7769801f041c28ad9e12849d54c5ed96b844692b8fcf2ab66ae91f761cc052d3f19777a4a49c43fa81a7ffb037cb2afbe62c4a8dec
 
 # Build metadata arguments (provided by CI/CD or set to defaults for local builds)
 ARG BUILD_DATE=unknown
@@ -110,6 +108,9 @@ RUN microdnf install -y --nodocs \
 # Copy all architecture directories (both might exist in the build context)
 COPY --chown=opensearch:root . /tmp/opensearch-build/
 
+# Used to verify the pkg
+COPY opensearch-release.pgp /etc/opensearch-release.pgp
+
 # Move the correct architecture to the final location
 RUN if [ "${TARGETARCH}" = "amd64" ]; then \
         ARCH_DIR="x86_64"; \
@@ -120,15 +121,14 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then \
     else \
         echo "ERROR: Unsupported TARGETARCH: ${TARGETARCH}" && exit 1; \
     fi && \
-    echo "Installing OpenSearch for architecture: ${TARGETARCH} from ${ARCH_DIR}" && \
+    echo "Installing OpenSearch for architecture: ${TARGETARCH} using RPM" && \
+    rpm --import /etc/opensearch-release.pgp && \
+    curl -L -o /tmp/opensearch.rpm https://artifacts.opensearch.org/releases/bundle/opensearch/${OPENSEARCH_VERSION}/opensearch-${OPENSEARCH_VERSION}-linux-${RPM_ARCH}.rpm && \
+    rpm -K /tmp/opensearch.rpm && \
     OPENSEARCH_INITIAL_ADMIN_PASSWORD='MyS3cur3P@ss2025' \
-    rpm -Uvh https://artifacts.opensearch.org/releases/bundle/opensearch/${OPENSEARCH_VERSION}/opensearch-${OPENSEARCH_VERSION}-linux-${RPM_ARCH}.rpm
-
-# Overlay our custom config files to /etc/opensearch (before SSL setup)
-COPY --chown=opensearch:root config/jvm.options /etc/opensearch/jvm.options
-COPY --chown=opensearch:root config/log4j2.properties /etc/opensearch/log4j2.properties
-
-RUN echo "Demo SSL infrastructure created" && \
+    rpm -Uvh /tmp/opensearch.rpm && \
+    rm -f /tmp/opensearch.rpm && \
+    echo "Demo SSL infrastructure created" && \
     rm -f /etc/opensearch/esnode.pem \
           /etc/opensearch/esnode-key.pem \
           /etc/opensearch/kirk.pem \
@@ -138,6 +138,10 @@ RUN echo "Demo SSL infrastructure created" && \
           /etc/opensearch/*.srl \
           /etc/opensearch/securityadmin_demo.sh && \
     echo "✓ Demo certificates removed in same layer"
+
+# Overlay our custom config files to /etc/opensearch (before SSL setup)
+COPY --chown=opensearch:root config/jvm.options /etc/opensearch/jvm.options
+COPY --chown=opensearch:root config/log4j2.properties /etc/opensearch/log4j2.properties
 
 # Copy certificate generation script (will be run at container startup)
 COPY scripts/generate-certs.sh /usr/local/bin/generate-certs.sh
