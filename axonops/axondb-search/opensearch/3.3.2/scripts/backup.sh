@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-[ "$AXONOPS_SEARCH_DEBUG" == "true" ] && set -x
 
 # Backup script for OpenSearch snapshots
 # - Checks whether a snapshot repository is configured according to env vars
@@ -14,6 +13,7 @@ set -euo pipefail
 # ============================================================================
 
 # OpenSearch connection - HTTPS by default for secure communication
+: "${AXONOPS_SEARCH_DEBUG:=false}"
 : "${AXONOPS_SEARCH_URL:=https://localhost:9200}"
 : "${AXONOPS_SEARCH_SNAPSHOT_REPO:=axon-backup-repo}"
 : "${AXONOPS_SEARCH_BACKUP_TARGET:=local}"
@@ -39,6 +39,8 @@ set -euo pipefail
 
 # Timeout for waiting on snapshot completion (in seconds)
 : "${AXONOPS_SEARCH_SNAPSHOT_TIMEOUT:=3600}"
+
+[ "$AXONOPS_SEARCH_DEBUG" == "true" ] && set -x
 
 # ============================================================================
 # Build curl arguments
