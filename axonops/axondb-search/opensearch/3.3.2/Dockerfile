@@ -99,25 +99,12 @@ RUN microdnf install -y --nodocs \
     && microdnf clean all \
     && rm -rf /var/cache/yum /var/cache/dnf
 
+COPY "./opensearch-${OPENSEARCH_VERSION}" "$OPENSEARCH_HOME"
+
 # Download and install OpenSearch with SHA512 verification
 RUN mkdir -p "$OPENSEARCH_HOME" /licenses && \
     cd /tmp && \
     ARCH=$(uname -m) && \
-    if [ "$ARCH" = "x86_64" ]; then \
-        OPENSEARCH_TARBALL="opensearch-${OPENSEARCH_VERSION}-linux-x64.tar.gz"; \
-        OPENSEARCH_SHA512=$OPENSEARCH_SHA512_AMD64; \
-    elif [ "$ARCH" = "aarch64" ]; then \
-        OPENSEARCH_TARBALL="opensearch-${OPENSEARCH_VERSION}-linux-arm64.tar.gz"; \
-        OPENSEARCH_SHA512=$OPENSEARCH_SHA512_ARM64; \
-    else \
-        echo "Invalid arch ${ARCH}" && exit 1; \
-    fi && \
-    echo "Downloading OpenSearch ${OPENSEARCH_VERSION} from official artifacts..." && \
-    wget -q "https://artifacts.opensearch.org/releases/bundle/opensearch/${OPENSEARCH_VERSION}/${OPENSEARCH_TARBALL}" && \
-    echo "${OPENSEARCH_SHA512}  ${OPENSEARCH_TARBALL}" | sha512sum -c - && \
-    echo "Extracting OpenSearch to ${OPENSEARCH_HOME}..." && \
-    tar -xzf "${OPENSEARCH_TARBALL}" --strip-components=1 -C "$OPENSEARCH_HOME" && \
-    rm "${OPENSEARCH_TARBALL}" && \
     cp "$OPENSEARCH_HOME/LICENSE.txt" /licenses/LICENSE.txt && \
     mv "$OPENSEARCH_HOME/config" /etc/opensearch && \
     ln -s /etc/opensearch "$OPENSEARCH_HOME/config" && \
