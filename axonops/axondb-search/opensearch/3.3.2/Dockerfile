@@ -3,19 +3,15 @@
 # Points to: registry.access.redhat.com/ubi9/ubi-minimal:latest
 ARG UBI9_MINIMAL_DIGEST=sha256:6fc28bcb6776e387d7a35a2056d9d2b985dc4e26031e98a2bd35a7137cd6fd71
 
+FROM registry.access.redhat.com/ubi9/ubi-minimal@${UBI9_MINIMAL_DIGEST}
+
+# Re-declare ARGs after FROM (Docker ARG scope rule)
+ENV UBI9_MINIMAL_DIGEST=sha256:6fc28bcb6776e387d7a35a2056d9d2b985dc4e26031e98a2bd35a7137cd6fd71
+
 # OpenSearch version and SHA512 checksum (from official OpenSearch artifacts)
 ARG OPENSEARCH_VERSION=3.3.2
 ARG OPENSEARCH_SHA512_AMD64=68dc91ada02bda29a1efed6ef9916d893e58eef42e20482a6bdb1aab21c2fae490ef198a815b4ab8bcbcc87e44ce272b5943d8f67dcf37bb432e0205031a94e4
 ARG OPENSEARCH_SHA512_ARM64=ab055a9192b04be020272a7769801f041c28ad9e12849d54c5ed96b844692b8fcf2ab66ae91f761cc052d3f19777a4a49c43fa81a7ffb037cb2afbe62c4a8dec
-
-FROM registry.access.redhat.com/ubi9/ubi-minimal@${UBI9_MINIMAL_DIGEST}
-
-# Re-declare ARGs after FROM (Docker ARG scope rule)
-ARG UBI9_MINIMAL_DIGEST
-ARG TARGETARCH
-ARG OPENSEARCH_VERSION
-ARG OPENSEARCH_SHA512_AMD64
-ARG OPENSEARCH_SHA512_ARM64
 
 # Build metadata arguments (provided by CI/CD or set to defaults for local builds)
 ARG BUILD_DATE=unknown

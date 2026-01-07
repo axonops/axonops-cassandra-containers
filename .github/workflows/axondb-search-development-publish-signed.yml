@@ -33,6 +33,10 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+          driver-opts: |
+            image=moby/buildkit:latest
 
       - name: Extract OpenSearch version from Dockerfile
         id: version
@@ -46,7 +50,7 @@ jobs:
         with:
           context: ./axonops/axondb-search/opensearch/3.3.2
           file: ./axonops/axondb-search/opensearch/3.3.2/Dockerfile
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           load: true
           tags: axondb-search:test
           build-args: |
