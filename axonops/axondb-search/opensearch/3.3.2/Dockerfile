@@ -113,7 +113,7 @@ COPY --chown=opensearch:root . /tmp/opensearch-build/
 # Move the correct architecture to the final location
 RUN if [ "${TARGETARCH}" = "amd64" ]; then \
         ARCH_DIR="x86_64"; \
-        RPM_ARCH="x86"; \
+        RPM_ARCH="x64"; \
     elif [ "${TARGETARCH}" = "arm64" ]; then \
         ARCH_DIR="aarch64"; \
         RPM_ARCH="arm64"; \
