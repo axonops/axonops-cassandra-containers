@@ -35,8 +35,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
         with:
           install: true
-          driver-opts: |
-            image=moby/buildkit:latest
+          driver: docker
 
       - name: Extract OpenSearch version from Dockerfile
         id: version
@@ -44,17 +43,6 @@ jobs:
           OPENSEARCH_VER=$(grep "^ARG OPENSEARCH_VERSION=" axonops/axondb-search/opensearch/3.3.2/Dockerfile | cut -d'=' -f2)
           echo "opensearch_version=${OPENSEARCH_VER}" >> $GITHUB_OUTPUT
           echo "✓ OpenSearch version: ${OPENSEARCH_VER}"
-
-      - name: Maximize Build Space
-        uses: easimon/maximize-build-space@v10
-        with:
-          root-reserve-mb: 2048
-          swap-size-mb: 1024
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-          remove-codeql: 'true'
-          remove-docker-images: 'true'
 
       - name: Build image for testing
         uses: docker/build-push-action@v5
@@ -174,6 +162,8 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -198,7 +188,7 @@ jobs:
           remove-android: 'true'
           remove-haskell: 'true'
           remove-codeql: 'true'
-          remove-docker-images: 'true'
+          remove-docker-images: 'false'
 
       - name: Build and push Docker image (multi-arch)
         id: build
