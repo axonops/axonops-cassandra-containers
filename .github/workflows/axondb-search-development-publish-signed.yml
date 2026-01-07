@@ -93,13 +93,21 @@ jobs:
             wget -q "${url}"
 
             echo "${sha512}  ${tarball}" | sha512sum -c -
+            # Create target directory
             mkdir -p ./axonops/axondb-search/opensearch/${OPENSEARCH_VERSION}/${target}
-            # Extract directly - tar will create opensearch-VERSION subdirectory
-            tar zxf "${tarball}" -C ./axonops/axondb-search/opensearch/${OPENSEARCH_VERSION}/${target}
+            # Extract with strip-components to avoid extra nesting
+            # The tarball contains opensearch-VERSION/ as root, we want to strip it
+            tar zxf "${tarball}" -C ./axonops/axondb-search/opensearch/${OPENSEARCH_VERSION}/${target} --strip-components=1
             echo "✓ Verified and extracted: ${tarball}"
             # List what was created for debugging
-            echo "Created structure:"
-            ls -la ./axonops/axondb-search/opensearch/${OPENSEARCH_VERSION}/${target}/ | head -5
+            echo "Created structure in ${target}:"
+            ls -la ./axonops/axondb-search/opensearch/${OPENSEARCH_VERSION}/${target}/ | head -10
+            # Verify LICENSE.txt exists
+            if [ -f "./axonops/axondb-search/opensearch/${OPENSEARCH_VERSION}/${target}/LICENSE.txt" ]; then
+              echo "✓ LICENSE.txt found"
+            else
+              echo "WARNING: LICENSE.txt not found in extracted files!"
+            fi
           }
 
           # Set checksums based on OpenSearch version
@@ -126,19 +134,6 @@ jobs:
           ls -la ./axonops/axondb-search/opensearch/${OPENSEARCH_VERSION}/x86_64/ | head -5
           echo "aarch64 contents:"
           ls -la ./axonops/axondb-search/opensearch/${OPENSEARCH_VERSION}/aarch64/ | head -5
-
-      - name: Debug - List build context structure
-        run: |
-          echo "=== Contents of build context ==="
-          echo "Current directory: $(pwd)"
-          echo "Testing for platform: ${{ matrix.platform }}"
-          echo "Checking axonops directory:"
-          ls -la ./axonops/axondb-search/opensearch/${{ matrix.opensearch_version }}/ || echo "Directory not found"
-          echo "=== Checking for architecture directories ==="
-          echo "x86_64 directory:"
-          ls -la ./axonops/axondb-search/opensearch/${{ matrix.opensearch_version }}/x86_64/ 2>/dev/null | head -5 || echo "x86_64 not found"
-          echo "aarch64 directory:"
-          ls -la ./axonops/axondb-search/opensearch/${{ matrix.opensearch_version }}/aarch64/ 2>/dev/null | head -5 || echo "aarch64 not found"
 
       - name: Set up QEMU for multi-arch builds
         uses: docker/setup-qemu-action@v3

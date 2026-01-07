@@ -119,12 +119,20 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then \
         echo "ERROR: Unsupported TARGETARCH: ${TARGETARCH}" && exit 1; \
     fi && \
     echo "Installing OpenSearch for architecture: ${TARGETARCH} from ${ARCH_DIR}" && \
-    if [ -d "/tmp/opensearch-build/${ARCH_DIR}/opensearch-${OPENSEARCH_VERSION}" ]; then \
-        mv "/tmp/opensearch-build/${ARCH_DIR}/opensearch-${OPENSEARCH_VERSION}" "$OPENSEARCH_HOME" && \
+    echo "Checking /tmp/opensearch-build structure:" && \
+    ls -la /tmp/opensearch-build/ | head -5 && \
+    echo "Checking architecture directory ${ARCH_DIR}:" && \
+    ls -la /tmp/opensearch-build/${ARCH_DIR}/ | head -10 && \
+    if [ -d "/tmp/opensearch-build/${ARCH_DIR}" ] && [ -f "/tmp/opensearch-build/${ARCH_DIR}/LICENSE.txt" ]; then \
+        echo "Found OpenSearch files in ${ARCH_DIR}, moving to $OPENSEARCH_HOME" && \
+        mv "/tmp/opensearch-build/${ARCH_DIR}" "$OPENSEARCH_HOME" && \
+        echo "Verifying move - contents of $OPENSEARCH_HOME:" && \
+        ls -la "$OPENSEARCH_HOME" | head -10 && \
         chown -R opensearch:root "$OPENSEARCH_HOME"; \
     else \
-        echo "ERROR: OpenSearch directory not found at /tmp/opensearch-build/${ARCH_DIR}/opensearch-${OPENSEARCH_VERSION}" && \
-        echo "Available directories:" && \
+        echo "ERROR: OpenSearch files not found in /tmp/opensearch-build/${ARCH_DIR}" && \
+        echo "Available structure:" && \
+        find /tmp/opensearch-build -type f -name "LICENSE.txt" 2>/dev/null || echo "No LICENSE.txt found" && \
         ls -la /tmp/opensearch-build/ && \
         exit 1; \
     fi && \
