@@ -125,14 +125,14 @@ RUN rpm -ivh https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.
 
 # Download and install Apache Cassandra with SHA512 verification
 RUN mkdir -p /licenses && \
-    cd /tmp && \
+    cd /opt && \
     CASSANDRA_TARBALL="apache-cassandra-${CASSANDRA_VERSION}-bin.tar.gz" && \
     echo "Downloading Cassandra ${CASSANDRA_VERSION} from Apache mirrors..." && \
-    wget -q "https://dlcdn.apache.org/cassandra/${CASSANDRA_VERSION}/${CASSANDRA_TARBALL}" || \
-    wget -q "https://archive.apache.org/dist/cassandra/${CASSANDRA_VERSION}/${CASSANDRA_TARBALL}" && \
-    echo "${CASSANDRA_SHA512}  ${CASSANDRA_TARBALL}" | sha512sum -c - && \
-    echo "Extracting Cassandra to /tmp/cassandra..." && \
-    tar -xzf "${CASSANDRA_TARBALL}" --no-same-owner --strip-components=1 -C "${CASSANDRA_PATH}" && \
+    wget -q "https://dlcdn.apache.org/cassandra/${CASSANDRA_VERSION}/${CASSANDRA_TARBALL}" -O /tmp/$CASSANDRA_TARBALL || \
+    wget -q "https://archive.apache.org/dist/cassandra/${CASSANDRA_VERSION}/${CASSANDRA_TARBALL}" -O /tmp/$CASSANDRA_TARBALL  && \
+    echo "${CASSANDRA_SHA512} /tmp/${CASSANDRA_TARBALL}" | sha512sum -c - && \
+    tar -xzf "/tmp/${CASSANDRA_TARBALL}" --no-same-owner && \
+    rm -rf $CASSANDRA_HOME && mv apache-cassandra-${CASSANDRA_VERSION} ${CASSANDRA_HOME} && \
     rm -f "${CASSANDRA_TARBALL}" && \
     cp "$CASSANDRA_HOME/LICENSE.txt" /licenses/LICENSE.txt && \
     mv "$CASSANDRA_HOME/conf" /etc/cassandra && \
