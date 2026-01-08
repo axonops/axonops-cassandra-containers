@@ -451,8 +451,8 @@ if [ ${#opensearch_opts[@]} -gt 0 ]; then
     echo ""
 fi
 
-# Set correct permissions for SSL certs
-chmod 600 /etc/opensearch/certs/*.pem
+# Set correct permissions for SSL certs (skip errors in Kube)
+chmod 600 /etc/opensearch/certs/*.pem || true
 
 echo ""
 echo "=== Starting OpenSearch ==="
