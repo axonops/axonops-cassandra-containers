@@ -87,8 +87,9 @@ jobs:
         with:
           context: ./k8ssandra/${{ steps.version.outputs.base_version }}
           file: ./k8ssandra/${{ steps.version.outputs.base_version }}/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          load: false
+          # Build only for the runner's platform in tests to enable loading
+          # Multi-platform builds are done in the publish workflows
+          load: true
           tags: axonops-cassandra:test
           build-args: |
             CASSANDRA_VERSION=${{ matrix.cassandra_version }}
@@ -241,8 +242,9 @@ jobs:
         with:
           context: ./k8ssandra/${{ steps.version.outputs.base_version }}
           file: ./k8ssandra/${{ steps.version.outputs.base_version }}/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          load: false
+          # Build only for the runner's platform in tests to enable loading
+          # Multi-platform builds are done in the publish workflows
+          load: true
           tags: axonops-cassandra:test
           build-args: |
             CASSANDRA_VERSION=${{ matrix.cassandra_version }}
