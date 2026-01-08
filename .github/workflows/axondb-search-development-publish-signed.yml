@@ -130,6 +130,7 @@ jobs:
         uses: ./.github/actions/axondb-search-verify-certificates
         with:
           container_name: axondb-test
+          image: axondb-search:test
 
       - name: Test authentication
         uses: ./.github/actions/axondb-search-test-authentication
