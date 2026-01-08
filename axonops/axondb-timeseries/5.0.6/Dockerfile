@@ -124,7 +124,7 @@ RUN rpm -ivh https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.
     rm -rf /var/cache/yum /var/cache/dnf
 
 # Download and install Apache Cassandra with SHA512 verification
-RUN mkdir -p "$CASSANDRA_HOME" /licenses && \
+RUN mkdir -p /licenses && \
     cd /tmp && \
     CASSANDRA_TARBALL="apache-cassandra-${CASSANDRA_VERSION}-bin.tar.gz" && \
     echo "Downloading Cassandra ${CASSANDRA_VERSION} from Apache mirrors..." && \
