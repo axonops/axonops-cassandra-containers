@@ -20,6 +20,9 @@ CVE-2023-6378   # logback
 CVE-2023-6481   # logback
 CVE-2025-12183  # lz4-java 1.8.0 → 1.8.1 (HIGH - DoS risk, fixed in upstream)
 
+# Java - Strimzi Kafka (upstream)
+CVE-2025-12383  # Eclipse Jersey race condition (jersey-client 3.1.9 → 3.1.10)
+
 # Java - Cassandra (fixed in later Cassandra versions)
 CVE-2022-42003  # jackson-databind (fixed in Cassandra 5.0.3+, 4.1.8+, 4.0.16+)
 CVE-2022-42004  # jackson-databind (fixed in Cassandra 5.0.3+, 4.1.8+)
