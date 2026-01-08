@@ -411,9 +411,6 @@ jobs:
           tags: |
             ghcr.io/${{ env.IMAGE_NAME }}:${{ inputs.operator_version }}-${{ matrix.kafka_version }}-${{ matrix.axon_agent_version }}
             ghcr.io/${{ env.IMAGE_NAME }}:${{ inputs.operator_version }}-${{ matrix.kafka_version }}
-            ghcr.io/${{ env.IMAGE_NAME }}:${{ matrix.kafka_version }}
-            ${{ steps.version.outputs.is_operator_latest == 'true' && format('ghcr.io/{0}:{1}-latest', env.IMAGE_NAME, inputs.operator_version) || '' }}
-            ${{ steps.version.outputs.is_global_latest == 'true' && format('ghcr.io/{0}:latest', env.IMAGE_NAME) || '' }}
           annotations: |
             index:org.opencontainers.image.created=${{ github.event.repository.updated_at }}
             index:org.opencontainers.image.authors=AxonOps
@@ -470,9 +467,6 @@ jobs:
           tags: |
             ghcr.io/${{ env.IMAGE_NAME }}:${{ inputs.operator_version }}-${{ matrix.kafka_version }}-${{ matrix.axon_agent_version }}
             ghcr.io/${{ env.IMAGE_NAME }}:${{ inputs.operator_version }}-${{ matrix.kafka_version }}
-            ghcr.io/${{ env.IMAGE_NAME }}:${{ matrix.kafka_version }}
-            ${{ steps.version.outputs.is_operator_latest == 'true' && format('ghcr.io/{0}:{1}-latest', env.IMAGE_NAME, inputs.operator_version) || '' }}
-            ${{ steps.version.outputs.is_global_latest == 'true' && format('ghcr.io/{0}:latest', env.IMAGE_NAME) || '' }}
           annotations: |
             index:org.opencontainers.image.created=${{ github.event.repository.updated_at }}
             index:org.opencontainers.image.authors=AxonOps
