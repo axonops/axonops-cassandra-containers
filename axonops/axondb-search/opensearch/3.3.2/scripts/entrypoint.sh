@@ -451,6 +451,9 @@ if [ ${#opensearch_opts[@]} -gt 0 ]; then
     echo ""
 fi
 
+# Set correct permissions for SSL certs
+chmod 600 /etc/opensearch/certs/*.pem
+
 echo ""
 echo "=== Starting OpenSearch ==="
 echo ""

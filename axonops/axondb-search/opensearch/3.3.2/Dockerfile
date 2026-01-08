@@ -137,11 +137,14 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then \
           /etc/opensearch/root-ca-key.pem \
           /etc/opensearch/*.srl \
           /etc/opensearch/securityadmin_demo.sh && \
-    echo "✓ Demo certificates removed in same layer"
+    echo "✓ Demo certificates removed in same layer" && \
+    echo "Removing performance analyzer" && \
+    /usr/share/opensearch/bin/opensearch-plugin remove opensearch-performance-analyzer
 
 # Overlay our custom config files to /etc/opensearch (before SSL setup)
 COPY --chown=opensearch:root config/jvm.options /etc/opensearch/jvm.options
 COPY --chown=opensearch:root config/log4j2.properties /etc/opensearch/log4j2.properties
+COPY --chown=opensearch:root config/opensearch.yml /etc/opensearch/opensearch.yml
 
 # Copy certificate generation script (will be run at container startup)
 COPY scripts/generate-certs.sh /usr/local/bin/generate-certs.sh
@@ -173,6 +176,7 @@ RUN mkdir -p /etc/axonops && \
     echo "JAVA_VERSION=\"$(${JAVA_HOME}/bin/java -version 2>&1 | head -1 || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
     echo "OS_VERSION=\"$(grep PRETTY_NAME /etc/os-release 2>/dev/null | sed 's/.*="\(.*\)"/\1/' || echo 'unknown') (UBI - Universal Base Image, freely redistributable)\"" >> /etc/axonops/build-info.txt && \
     echo "PLATFORM=\"$(uname -m || echo 'unknown')\"" >> /etc/axonops/build-info.txt && \
+    chmod 600 /etc/opensearch/jvm.options /etc/opensearch/log4j2.properties && \
     chown -R opensearch:root /etc/axonops
 
 # AxonDB entrypoint
