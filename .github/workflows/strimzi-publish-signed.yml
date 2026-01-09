@@ -156,12 +156,18 @@ jobs:
           OPERATOR_VERSION="${{ steps.version.outputs.operator_version || inputs.operator_version }}"
           VERSION_MATRIX='${{ env.VERSION_MATRIX }}'
 
+          # Skip version check when building all versions (too many to check)
+          if [ -z "$OPERATOR_VERSION" ]; then
+            echo "✓ Building all versions - skipping individual tag checks"
+            exit 0
+          fi
+
           # Get Kafka versions and agent version for this operator version
           KAFKA_VERSIONS=$(echo "$VERSION_MATRIX" | jq -r --arg v "$OPERATOR_VERSION" '.[$v].kafka_versions[]')
 
           # Use input axon_agent_version if provided, otherwise use matrix default
           if [ -n "${{ inputs.axon_agent_version }}" ]; then
-            AXON_AGENT_VERSION="${{ inputs.axon_agent_version }}"
+            AXON_AGENT_VERSION="${{{ inputs.axon_agent_version }}"
           else
             AXON_AGENT_VERSION=$(echo "$VERSION_MATRIX" | jq -r --arg v "$OPERATOR_VERSION" '.[$v].axon_agent_version')
           fi
@@ -328,20 +334,32 @@ jobs:
           OPERATOR_VERSION="${{ steps.version.outputs.operator_version || inputs.operator_version }}"
           VERSION_MATRIX='${{ env.VERSION_MATRIX }}'
 
-          # Get Kafka versions and agent version for this operator
-          KAFKA_VERSIONS=$(echo "$VERSION_MATRIX" | jq -r --arg v "$OPERATOR_VERSION" '.[$v].kafka_versions | join(", ")')
-          KAFKA_COUNT=$(echo "$VERSION_MATRIX" | jq -r --arg v "$OPERATOR_VERSION" '.[$v].kafka_versions | length')
-
-          # Use input axon_agent_version if provided, otherwise use matrix default
-          if [ -n "${{ inputs.axon_agent_version }}" ]; then
-            AXON_AGENT_VERSION="${{ inputs.axon_agent_version }}"
+          # Check if building all versions or a specific version
+          if [ -z "$OPERATOR_VERSION" ]; then
+            # Building all versions
+            ALL_OPERATORS=$(echo "$VERSION_MATRIX" | jq -r 'keys | join(", ")')
+            TOTAL_IMAGES=$(echo "$VERSION_MATRIX" | jq '[.[].kafka_versions | length] | add')
+            KAFKA_VERSIONS="Multiple across all operators"
+            KAFKA_COUNT=$TOTAL_IMAGES
+            AXON_AGENT_VERSION="2.0.12 (default)"
+            OPERATOR_VERSION="All ($ALL_OPERATORS)"
+            TOTAL_TAGS=$((TOTAL_IMAGES * 3 + 10))  # Approximate total tags
           else
-            AXON_AGENT_VERSION=$(echo "$VERSION_MATRIX" | jq -r --arg v "$OPERATOR_VERSION" '.[$v].axon_agent_version')
-          fi
+            # Get Kafka versions and agent version for this specific operator
+            KAFKA_VERSIONS=$(echo "$VERSION_MATRIX" | jq -r --arg v "$OPERATOR_VERSION" '.[$v].kafka_versions | join(", ")')
+            KAFKA_COUNT=$(echo "$VERSION_MATRIX" | jq -r --arg v "$OPERATOR_VERSION" '.[$v].kafka_versions | length')
 
-          # Calculate total tags: each Kafka version gets 3 tags (immutable, operator-floating, kafka-floating)
-          # Plus operator-latest and latest tags
-          TOTAL_TAGS=$((KAFKA_COUNT * 3 + 2))
+            # Use input axon_agent_version if provided, otherwise use matrix default
+            if [ -n "${{ inputs.axon_agent_version }}" ]; then
+              AXON_AGENT_VERSION="${{ inputs.axon_agent_version }}"
+            else
+              AXON_AGENT_VERSION=$(echo "$VERSION_MATRIX" | jq -r --arg v "$OPERATOR_VERSION" '.[$v].axon_agent_version')
+            fi
+
+            # Calculate total tags: each Kafka version gets 3 tags (immutable, operator-floating, kafka-floating)
+            # Plus operator-latest and latest tags
+            TOTAL_TAGS=$((KAFKA_COUNT * 3 + 2))
+          fi
 
           cat > release_body.txt <<EOF
           Strimzi Kafka signed container images release ${{ inputs.container_version }}
