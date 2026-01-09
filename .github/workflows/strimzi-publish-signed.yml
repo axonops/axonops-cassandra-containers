@@ -12,9 +12,10 @@ on:
         required: true
         type: string
       operator_version:
-        description: 'Strimzi operator version to build (e.g., 0.47.0, 0.46.0, 0.45.0, etc.)'
-        required: true
+        description: 'Strimzi operator version to build (e.g., 0.47.0, 0.46.0, 0.45.0, etc.) - Leave empty to build all versions'
+        required: false
         type: string
+        default: ''
       axon_agent_version:
         description: 'AxonOps agent version to use (optional, overrides matrix default)'
         required: false
@@ -130,8 +131,14 @@ jobs:
 
       - name: Validate operator version
         run: |
-          OPERATOR_VERSION="${{ inputs.operator_version }}"
+          OPERATOR_VERSION="${{ steps.version.outputs.operator_version || inputs.operator_version }}"
           VERSION_MATRIX='${{ env.VERSION_MATRIX }}'
+
+          # Skip validation if building all versions
+          if [ -z "$OPERATOR_VERSION" ]; then
+            echo "✓ No specific operator version provided - will build all versions"
+            exit 0
+          fi
 
           if ! echo "$VERSION_MATRIX" | jq -e --arg v "$OPERATOR_VERSION" '.[$v]' > /dev/null; then
             echo "ERROR: Operator version $OPERATOR_VERSION not found in VERSION_MATRIX"
@@ -146,7 +153,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "Checking if version ${{ inputs.container_version }} exists..."
-          OPERATOR_VERSION="${{ inputs.operator_version }}"
+          OPERATOR_VERSION="${{ steps.version.outputs.operator_version || inputs.operator_version }}"
           VERSION_MATRIX='${{ env.VERSION_MATRIX }}'
 
           # Get Kafka versions and agent version for this operator version
@@ -172,6 +179,8 @@ jobs:
 
   strimzi-test:
     needs: strimzi-validate
+    # Skip test job when building all versions
+    if: inputs.operator_version != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -188,7 +197,7 @@ jobs:
       - name: Get first Kafka version and agent version for testing
         id: versions
         run: |
-          OPERATOR_VERSION="${{ inputs.operator_version }}"
+          OPERATOR_VERSION="${{ steps.version.outputs.operator_version || inputs.operator_version }}"
           VERSION_MATRIX='${{ env.VERSION_MATRIX }}'
 
           # Get first Kafka version for this operator
@@ -211,7 +220,7 @@ jobs:
       - name: Resolve Strimzi base image digest
         id: strimzi
         run: |
-          OPERATOR_VERSION="${{ inputs.operator_version }}"
+          OPERATOR_VERSION="${{ steps.version.outputs.operator_version || inputs.operator_version }}"
           KAFKA_VERSION="${{ steps.versions.outputs.kafka_version }}"
           COMPOSITE_KEY="${OPERATOR_VERSION}+${KAFKA_VERSION}"
 
@@ -249,7 +258,7 @@ jobs:
           load: true
           tags: axonops-strimzi:test
           build-args: |
-            STRIMZI_VERSION=${{ inputs.operator_version }}
+            STRIMZI_VERSION=${{ steps.version.outputs.operator_version || inputs.operator_version }}
             KAFKA_VERSION=${{ steps.versions.outputs.kafka_version }}
             STRIMZI_BASE_DIGEST=${{ steps.strimzi.outputs.digest }}
             AXONOPS_REPO_FILE=${{ vars.AXONOPS_REPO_FILE || 'axonops.repo.release' }}
@@ -296,7 +305,12 @@ jobs:
           docker rmi axonops-strimzi:test || true
 
   strimzi-create-release:
-    needs: strimzi-test
+    needs: [strimzi-validate, strimzi-test]
+    # Run if validate passed and either test passed or was skipped
+    if: |
+      always() &&
+      needs.strimzi-validate.result == 'success' &&
+      (needs.strimzi-test.result == 'success' || needs.strimzi-test.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -311,7 +325,7 @@ jobs:
       - name: Generate release body
         id: release_body
         run: |
-          OPERATOR_VERSION="${{ inputs.operator_version }}"
+          OPERATOR_VERSION="${{ steps.version.outputs.operator_version || inputs.operator_version }}"
           VERSION_MATRIX='${{ env.VERSION_MATRIX }}'
 
           # Get Kafka versions and agent version for this operator
@@ -387,7 +401,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               tag_name: '${{ inputs.main_git_tag }}',
-              name: `strimzi-${{ inputs.operator_version }}-${{ inputs.container_version }}`,
+              name: `strimzi-${{ steps.version.outputs.operator_version || inputs.operator_version }}-${{ inputs.container_version }}`,
               body: body,
               draft: false,
               prerelease: false
@@ -396,7 +410,13 @@ jobs:
             return release.data.id;
 
   strimzi-generate-matrix:
-    needs: [strimzi-test, strimzi-create-release]
+    needs: [strimzi-validate, strimzi-test, strimzi-create-release]
+    # Run if validate and release passed, and either test passed or was skipped
+    if: |
+      always() &&
+      needs.strimzi-validate.result == 'success' &&
+      needs.strimzi-create-release.result == 'success' &&
+      (needs.strimzi-test.result == 'success' || needs.strimzi-test.result == 'skipped')
     runs-on: ubuntu-latest
     outputs:
       kafka_matrix: ${{ steps.matrix.outputs.kafka_matrix }}
@@ -404,26 +424,47 @@ jobs:
       - name: Generate build matrix
         id: matrix
         run: |
-          OPERATOR_VERSION="${{ inputs.operator_version }}"
+          OPERATOR_VERSION="${{ steps.version.outputs.operator_version || inputs.operator_version }}"
           VERSION_MATRIX='${{ env.VERSION_MATRIX }}'
 
-          # Get Kafka versions and agent version for this operator
-          KAFKA_VERSIONS=$(echo "$VERSION_MATRIX" | jq -c --arg v "$OPERATOR_VERSION" '.[$v].kafka_versions')
+          # Check if we're building a specific version or all versions
+          if [ -z "$OPERATOR_VERSION" ]; then
+            echo "Building all operator versions..."
 
-          # Use input axon_agent_version if provided, otherwise use matrix default
-          if [ -n "${{ inputs.axon_agent_version }}" ]; then
-            AXON_AGENT_VERSION="${{ inputs.axon_agent_version }}"
-            echo "Using provided AxonOps Agent version: $AXON_AGENT_VERSION"
+            # Generate matrix for ALL operator versions
+            MATRIX_JSON=$(echo "$VERSION_MATRIX" | jq -c '[
+              to_entries[] |
+              .value.kafka_versions[] as $kafka_version |
+              {
+                operator_version: .key,
+                kafka_version: $kafka_version,
+                axon_agent_version: .value.axon_agent_version
+              }
+            ]')
+
+            echo "Generated matrix for all operator versions:"
           else
-            AXON_AGENT_VERSION=$(echo "$VERSION_MATRIX" | jq -r --arg v "$OPERATOR_VERSION" '.[$v].axon_agent_version')
-            echo "Using matrix default AxonOps Agent version: $AXON_AGENT_VERSION"
+            echo "Building specific operator version: $OPERATOR_VERSION"
+
+            # Get Kafka versions and agent version for this operator
+            KAFKA_VERSIONS=$(echo "$VERSION_MATRIX" | jq -c --arg v "$OPERATOR_VERSION" '.[$v].kafka_versions')
+
+            # Use input axon_agent_version if provided, otherwise use matrix default
+            if [ -n "${{ inputs.axon_agent_version }}" ]; then
+              AXON_AGENT_VERSION="${{ inputs.axon_agent_version }}"
+              echo "Using provided AxonOps Agent version: $AXON_AGENT_VERSION"
+            else
+              AXON_AGENT_VERSION=$(echo "$VERSION_MATRIX" | jq -r --arg v "$OPERATOR_VERSION" '.[$v].axon_agent_version')
+              echo "Using matrix default AxonOps Agent version: $AXON_AGENT_VERSION"
+            fi
+
+            # Convert to GitHub Actions matrix format with operator_version for consistency
+            MATRIX_JSON=$(echo "$KAFKA_VERSIONS" | jq -c --arg op "$OPERATOR_VERSION" --arg axon "$AXON_AGENT_VERSION" '[.[] | {operator_version: $op, kafka_version: ., axon_agent_version: $axon}]')
+
+            echo "Generated matrix for Strimzi $OPERATOR_VERSION with AxonOps Agent $AXON_AGENT_VERSION:"
           fi
 
-          # Convert to GitHub Actions matrix format with axon_agent_version for each entry
-          MATRIX_JSON=$(echo "$KAFKA_VERSIONS" | jq -c --arg axon "$AXON_AGENT_VERSION" '[.[] | {kafka_version: ., axon_agent_version: $axon}]')
-
           echo "kafka_matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
-          echo "Generated matrix for Strimzi $OPERATOR_VERSION with AxonOps Agent $AXON_AGENT_VERSION:"
           echo "$MATRIX_JSON" | jq '.'
 
   strimzi-build-push-sign:
@@ -451,7 +492,8 @@ jobs:
       - name: Resolve Strimzi base image digest
         id: strimzi
         run: |
-          OPERATOR_VERSION="${{ inputs.operator_version }}"
+          # Use operator_version from matrix if available (when building all), otherwise from inputs
+          OPERATOR_VERSION="${{ matrix.operator_version || inputs.operator_version }}"
           KAFKA_VERSION="${{ matrix.kafka_version }}"
           COMPOSITE_KEY="${OPERATOR_VERSION}+${KAFKA_VERSION}"
 
@@ -489,9 +531,13 @@ jobs:
       - name: Determine latest Kafka version
         id: version
         run: |
-          OPERATOR_VERSION="${{ inputs.operator_version }}"
+          # Use operator_version from matrix if available (when building all), otherwise from inputs
+          OPERATOR_VERSION="${{ matrix.operator_version || inputs.operator_version }}"
           VERSION_MATRIX='${{ env.VERSION_MATRIX }}'
           CURRENT_KAFKA="${{ matrix.kafka_version }}"
+
+          # Store operator version for later use
+          echo "operator_version=$OPERATOR_VERSION" >> $GITHUB_OUTPUT
 
           # Get all Kafka versions for this operator
           ALL_KAFKA=$(echo "$VERSION_MATRIX" | jq -r --arg v "$OPERATOR_VERSION" '.[$v].kafka_versions | sort | reverse | join(" ")')
@@ -525,10 +571,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ env.IMAGE_NAME }}:${{ inputs.operator_version }}-${{ matrix.kafka_version }}-${{ matrix.axon_agent_version }}
-            ghcr.io/${{ env.IMAGE_NAME }}:${{ inputs.operator_version }}-${{ matrix.kafka_version }}
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.operator_version }}-${{ matrix.kafka_version }}-${{ matrix.axon_agent_version }}
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.operator_version }}-${{ matrix.kafka_version }}
             ghcr.io/${{ env.IMAGE_NAME }}:${{ matrix.kafka_version }}
-            ${{ steps.version.outputs.is_operator_latest == 'true' && format('ghcr.io/{0}:{1}-latest', env.IMAGE_NAME, inputs.operator_version) || '' }}
+            ${{ steps.version.outputs.is_operator_latest == 'true' && format('ghcr.io/{0}:{1}-latest', env.IMAGE_NAME, steps.version.outputs.operator_version) || '' }}
             ${{ steps.version.outputs.is_global_latest == 'true' && format('ghcr.io/{0}:latest', env.IMAGE_NAME) || '' }}
           annotations: |
             index:org.opencontainers.image.created=${{ github.event.repository.updated_at }}
@@ -541,16 +587,16 @@ jobs:
             index:org.opencontainers.image.vendor=AxonOps
             index:org.opencontainers.image.licenses=Apache-2.0
             index:org.opencontainers.image.title=AxonOps Strimzi Kafka ${{ matrix.kafka_version }}
-            index:org.opencontainers.image.description=Strimzi Kafka ${{ matrix.kafka_version }} (Operator v${{ inputs.operator_version }}) + AxonOps monitoring. Multi-arch (amd64/arm64), signed with cosign, optimized for Kubernetes.
-            index:org.opencontainers.image.ref.name=ghcr.io/${{ env.IMAGE_NAME }}:${{ inputs.operator_version }}-${{ matrix.kafka_version }}-${{ matrix.axon_agent_version }}
-            index:org.opencontainers.image.base.name=quay.io/strimzi/kafka:${{ inputs.operator_version }}-kafka-${{ matrix.kafka_version }}
+            index:org.opencontainers.image.description=Strimzi Kafka ${{ matrix.kafka_version }} (Operator v${{ steps.version.outputs.operator_version || inputs.operator_version }}) + AxonOps monitoring. Multi-arch (amd64/arm64), signed with cosign, optimized for Kubernetes.
+            index:org.opencontainers.image.ref.name=ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.operator_version || inputs.operator_version }}-${{ matrix.kafka_version }}-${{ matrix.axon_agent_version }}
+            index:org.opencontainers.image.base.name=quay.io/strimzi/kafka:${{ steps.version.outputs.operator_version || inputs.operator_version }}-kafka-${{ matrix.kafka_version }}
             index:org.opencontainers.image.base.digest=${{ steps.strimzi.outputs.digest }}
-            index:com.axonops.strimzi.version=${{ inputs.operator_version }}
+            index:com.axonops.strimzi.version=${{ steps.version.outputs.operator_version || inputs.operator_version }}
             index:com.axonops.kafka.version=${{ matrix.kafka_version }}
             index:com.axonops.axon-agent.version=${{ matrix.axon_agent_version }}
             index:com.axonops.build.actor=${{ github.actor }}
           build-args: |
-            STRIMZI_VERSION=${{ inputs.operator_version }}
+            STRIMZI_VERSION=${{ steps.version.outputs.operator_version || inputs.operator_version }}
             KAFKA_VERSION=${{ matrix.kafka_version }}
             STRIMZI_BASE_DIGEST=${{ steps.strimzi.outputs.digest }}
             AXONOPS_REPO_FILE=${{ vars.AXONOPS_REPO_FILE || 'axonops.repo.release' }}
@@ -584,10 +630,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ env.IMAGE_NAME }}:${{ inputs.operator_version }}-${{ matrix.kafka_version }}-${{ matrix.axon_agent_version }}
-            ghcr.io/${{ env.IMAGE_NAME }}:${{ inputs.operator_version }}-${{ matrix.kafka_version }}
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.operator_version }}-${{ matrix.kafka_version }}-${{ matrix.axon_agent_version }}
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.operator_version }}-${{ matrix.kafka_version }}
             ghcr.io/${{ env.IMAGE_NAME }}:${{ matrix.kafka_version }}
-            ${{ steps.version.outputs.is_operator_latest == 'true' && format('ghcr.io/{0}:{1}-latest', env.IMAGE_NAME, inputs.operator_version) || '' }}
+            ${{ steps.version.outputs.is_operator_latest == 'true' && format('ghcr.io/{0}:{1}-latest', env.IMAGE_NAME, steps.version.outputs.operator_version) || '' }}
             ${{ steps.version.outputs.is_global_latest == 'true' && format('ghcr.io/{0}:latest', env.IMAGE_NAME) || '' }}
           annotations: |
             index:org.opencontainers.image.created=${{ github.event.repository.updated_at }}
@@ -600,16 +646,16 @@ jobs:
             index:org.opencontainers.image.vendor=AxonOps
             index:org.opencontainers.image.licenses=Apache-2.0
             index:org.opencontainers.image.title=AxonOps Strimzi Kafka ${{ matrix.kafka_version }}
-            index:org.opencontainers.image.description=Strimzi Kafka ${{ matrix.kafka_version }} (Operator v${{ inputs.operator_version }}) + AxonOps monitoring. Multi-arch (amd64/arm64), signed with cosign, optimized for Kubernetes.
-            index:org.opencontainers.image.ref.name=ghcr.io/${{ env.IMAGE_NAME }}:${{ inputs.operator_version }}-${{ matrix.kafka_version }}-${{ matrix.axon_agent_version }}
-            index:org.opencontainers.image.base.name=quay.io/strimzi/kafka:${{ inputs.operator_version }}-kafka-${{ matrix.kafka_version }}
+            index:org.opencontainers.image.description=Strimzi Kafka ${{ matrix.kafka_version }} (Operator v${{ steps.version.outputs.operator_version || inputs.operator_version }}) + AxonOps monitoring. Multi-arch (amd64/arm64), signed with cosign, optimized for Kubernetes.
+            index:org.opencontainers.image.ref.name=ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.operator_version || inputs.operator_version }}-${{ matrix.kafka_version }}-${{ matrix.axon_agent_version }}
+            index:org.opencontainers.image.base.name=quay.io/strimzi/kafka:${{ steps.version.outputs.operator_version || inputs.operator_version }}-kafka-${{ matrix.kafka_version }}
             index:org.opencontainers.image.base.digest=${{ steps.strimzi.outputs.digest }}
-            index:com.axonops.strimzi.version=${{ inputs.operator_version }}
+            index:com.axonops.strimzi.version=${{ steps.version.outputs.operator_version || inputs.operator_version }}
             index:com.axonops.kafka.version=${{ matrix.kafka_version }}
             index:com.axonops.axon-agent.version=${{ matrix.axon_agent_version }}
             index:com.axonops.build.actor=${{ github.actor }}
           build-args: |
-            STRIMZI_VERSION=${{ inputs.operator_version }}
+            STRIMZI_VERSION=${{ steps.version.outputs.operator_version || inputs.operator_version }}
             KAFKA_VERSION=${{ matrix.kafka_version }}
             STRIMZI_BASE_DIGEST=${{ steps.strimzi.outputs.digest }}
             AXONOPS_REPO_FILE=${{ vars.AXONOPS_REPO_FILE || 'axonops.repo.release' }}
@@ -620,4 +666,4 @@ jobs:
       - name: Image published and signed
         run: |
           echo "✓ Image pushed and signed"
-          echo "   ghcr.io/${{ env.IMAGE_NAME }}:${{ inputs.operator_version }}-${{ matrix.kafka_version }}-${{ matrix.axon_agent_version }}"
+          echo "   ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.operator_version || inputs.operator_version }}-${{ matrix.kafka_version }}-${{ matrix.axon_agent_version }}"
