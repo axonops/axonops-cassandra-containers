@@ -14,6 +14,7 @@ A Helm chart for deploying the AxonOps Server - the unified observability platfo
 - [Installation Examples](#installation-examples)
   - [Basic Installation](#basic-installation)
   - [Installation with External Databases](#installation-with-external-databases)
+  - [Installation with External Configuration Secret](#installation-with-external-configuration-secret)
   - [Installation with Ingress](#installation-with-ingress)
   - [Installation with TLS/mTLS](#installation-with-tlsmtls)
   - [Installation with LDAP Authentication](#installation-with-ldap-authentication)
@@ -244,6 +245,152 @@ Install:
 
 ```bash
 helm install axon-server ./axon-server -f values-external-dbs.yaml
+```
+
+### Installation with External Configuration Secret
+
+Use an external Secret resource for configuration instead of the auto-generated one. This is useful when:
+- You want to manage secrets through external tools (Sealed Secrets, External Secrets Operator, etc.)
+- You need to share configuration across multiple deployments
+- You want to version control encrypted secrets separately
+
+**Step 1: Create your configuration secret**
+
+```yaml
+# axon-server-config-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-axon-server-config
+  namespace: default
+type: Opaque
+stringData:
+  axon-server.yml: |
+    # Listener configuration
+    host: 0.0.0.0
+    api_port: 8080
+    agents_port: 1888
+
+    # Search database configuration
+    search_db:
+      hosts:
+        - https://axondb-search-cluster-master:9200
+      username: admin
+      password: mysecurepassword
+      skip_verify: true
+
+    # Organization configuration
+    org_name: my-organization
+    license_key: YOUR_LICENSE_KEY_HERE
+
+    # Dashboard URL
+    axon_dash_url: https://axonops.example.com
+
+    # Log to stdout for Kubernetes
+    log_file: /dev/stdout
+
+    # Cassandra timeseries database configuration
+    cql_hosts:
+      - axondb-timeseries-headless.default.svc.cluster.local
+    cql_username: axonops
+    cql_password: cassandra-password
+    cql_local_dc: datacenter1
+    cql_ssl: true
+    cql_skip_verify: true
+
+    # Optional: Authentication configuration
+    auth:
+      enabled: true
+      type: LDAP
+      settings:
+        host: ldap.example.com
+        port: 636
+        base: dc=example,dc=com
+        useSSL: true
+        bindDN: cn=axonops,ou=services,dc=example,dc=com
+        bindPassword: ldap-bind-password
+        userFilter: (cn=%s)
+        rolesAttribute: memberOf
+
+    # Optional: TLS configuration
+    tls:
+      mode: TLS
+
+    # Optional: Alerting configuration
+    alerting:
+      notification_interval: 3h
+```
+
+Apply the secret:
+
+```bash
+kubectl apply -f axon-server-config-secret.yaml
+```
+
+**Step 2: Create values file referencing the external secret**
+
+```yaml
+# values-external-secret.yaml
+# Reference the external configuration secret
+configurationSecret: "my-axon-server-config"
+
+# Resource limits
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+# Persistence settings
+persistence:
+  enabled: true
+  size: 5Gi
+
+# Services configuration
+apiService:
+  type: ClusterIP
+  listenPort: 8080
+
+agentService:
+  type: ClusterIP
+  listenPort: 1888
+
+# Optional: Ingress configuration
+apiIngress:
+  enabled: false
+
+agentIngress:
+  enabled: false
+```
+
+**Step 3: Install using the external secret**
+
+```bash
+helm install axon-server ./axon-server -f values-external-secret.yaml
+```
+
+**Important notes:**
+- When `configurationSecret` is set, the chart will NOT create its own Secret resource
+- The external secret must contain a key named `axon-server.yml` with the complete configuration
+- All configuration that would normally go in `config.*` values must be in the external secret
+- The `searchDb.*` values in the helm values are ignored when using an external secret
+- You can still configure other Helm values like resources, persistence, ingress, etc.
+
+**Verify the deployment:**
+
+```bash
+# Check that the pod is using the external secret
+kubectl get statefulset axon-server -o yaml | grep -A 2 "secretName"
+
+# Should show:
+#   - name: config
+#     secret:
+#       secretName: my-axon-server-config
+
+# Verify the pod is running with the configuration
+kubectl logs axon-server-0 | head -20
 ```
 
 ### Installation with Ingress
@@ -731,6 +878,7 @@ curl http://localhost:8080/api/v1/healthz
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
+| `configurationSecret` | Name of external Secret containing axon-server.yml configuration | `""` |
 | `config.org_name` | Organization name | `"example"` |
 | `config.license_key` | AxonOps license key (required) | `""` |
 | `config.listener.api_port` | API port for dashboard connections | `8080` |
@@ -752,6 +900,11 @@ curl http://localhost:8080/api/v1/healthz
 **License Key:**
 - A valid AxonOps license key is required for production use
 - Contact AxonOps at <info@axonops.com> to obtain a license
+
+**External Configuration Secret:**
+- Use `configurationSecret` to reference an external Secret instead of auto-generating one
+- Useful for GitOps workflows and secret management tools (Sealed Secrets, External Secrets, etc.)
+- When set, all `config.*` and `searchDb.*` values from Helm are ignored
 
 **Database Connections:**
 - The server requires connections to both timeseries and search databases
@@ -791,6 +944,7 @@ curl http://localhost:8080/api/v1/healthz
 | apiService.annotations | object | `{}` | Annotations for API service |
 | apiService.listenPort | int | `8080` | API service port |
 | apiService.type | string | `"ClusterIP"` | API service type |
+| configurationSecret | string | `""` | External Secret name containing axon-server.yml configuration |
 | config.alerting.notification_interval | string | `"3h"` | Alert notification interval |
 | config.auth.enabled | bool | `false` | Enable authentication |
 | config.extraConfig | object | `{}` | Additional configuration options |

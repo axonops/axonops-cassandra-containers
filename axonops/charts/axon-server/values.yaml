@@ -18,6 +18,8 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+configurationSecret: ""
+
 # Configure the Elasticsearch endpoint
 searchDb:
   hosts:
@@ -48,11 +50,6 @@ config:
     host: 0.0.0.0  # axon-server endpoint used by the API and the agents
     api_port: 8080 # API port (axon-server <> axon-dash)
     agents_port: 1888 # axon-server <> axon-agents
-
-  alerting:
-    # How long to wait before sending a notification again if it has already
-    # been sent successfully for an alert. (Usually ~3h or more).
-    notification_interval: 3h
 
   tls:
     mode: "disabled" # disabled, TLS, mTLS
