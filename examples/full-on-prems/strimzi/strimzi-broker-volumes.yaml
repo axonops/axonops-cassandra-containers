@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-${STRIMZI_CLUSTER_NAME}-broker-pool-${STRIMZI_BROKER_ID}
+  labels:
+    strimzi.io/cluster: ${STRIMZI_CLUSTER_NAME}
+    strimzi.io/pool: broker-pool
+spec:
+  capacity:
+    storage: ${STRIMZI_BROKER_DISK_SIZE}
+  accessModes:
+  - ReadWriteOnce
+  volumeMode: Filesystem
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: strimzi-hostpath-manual
+  hostPath:
+    path: /data/strimzi/${STRIMZI_CLUSTER_NAME}/broker-pool-${STRIMZI_BROKER_ID}
+    type: Directory
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - ${STRIMZI_BROKER_NODE}
