@@ -257,13 +257,13 @@ done
 if [ -n "$CASSANDRA_HEAP_SIZE" ]; then
     # Check if -Xms and -Xmx lines already exist and update them, or add new ones
     if grep -q "^-Xms" "/etc/cassandra/jvm17-server.options"; then
-        _sed-in-place "/etc/cassandra/jvm17-server.options" -r 's/^-Xms.*/'""-Xms${CASSANDRA_HEAP_SIZE}"'/'
+        _sed-in-place "/etc/cassandra/jvm17-server.options" -r 's|^-Xms.*|-Xms'"${CASSANDRA_HEAP_SIZE}"'|'
     else
         echo "-Xms${CASSANDRA_HEAP_SIZE}" >> "/etc/cassandra/jvm17-server.options"
     fi
 
     if grep -q "^-Xmx" "/etc/cassandra/jvm17-server.options"; then
-        _sed-in-place "/etc/cassandra/jvm17-server.options" -r 's/^-Xmx.*/'""-Xmx${CASSANDRA_HEAP_SIZE}"'/'
+        _sed-in-place "/etc/cassandra/jvm17-server.options" -r 's|^-Xmx.*|-Xmx'"${CASSANDRA_HEAP_SIZE}"'|'
     else
         echo "-Xmx${CASSANDRA_HEAP_SIZE}" >> "/etc/cassandra/jvm17-server.options"
     fi
