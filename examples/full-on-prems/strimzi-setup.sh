@@ -132,8 +132,14 @@ parse_node_selectors() {
     IFS=',' read -ra PAIRS <<< "$KAFKA_CONTROLLER_NODE_SELECTORS"
     for pair in "${PAIRS[@]}"; do
       IFS=':' read -r replica node <<< "$pair"
-      # Extract replica number from format like "controller-0" or just "0"
+      # Extract replica number from various formats: "controller-0", "ctrl-0", or just "0"
       replica_num="${replica#controller-}"
+      replica_num="${replica_num#ctrl-}"
+      # Extract just the number if it's still not numeric
+      if ! [[ "$replica_num" =~ ^[0-9]+$ ]]; then
+        # Try to extract trailing number
+        replica_num=$(echo "$replica" | sed 's/.*-\([0-9]\+\)$/\1/')
+      fi
       controller_nodes[$replica_num]=$node
       info "  Controller $replica_num -> Node $node"
     done
@@ -540,29 +546,33 @@ apply_strimzi_resources() {
 
     # Generate controller PVs
     echo "# Generated Controller PersistentVolumes" > "$controller_pvs_file"
+    local first_controller=true
     for i in "${!controller_nodes[@]}"; do
       local node="${controller_nodes[$i]}"
       export STRIMZI_CONTROLLER_ID="$i"
       export STRIMZI_CONTROLLER_NODE="$node"
       export STRIMZI_CONTROLLER_DISK_SIZE="${STRIMZI_CONTROLLER_STORAGE_SIZE:-5Gi}"
 
-      if [[ $i -gt 0 ]]; then
+      if [[ "$first_controller" == "false" ]]; then
         echo "---" >> "$controller_pvs_file"
       fi
+      first_controller=false
       envsubst < "strimzi/$STRIMZI_CONTROLLER_VOLUMES_FILE" >> "$controller_pvs_file"
     done
 
     # Generate broker PVs
     echo "# Generated Broker PersistentVolumes" > "$broker_pvs_file"
+    local first_broker=true
     for i in "${!broker_nodes[@]}"; do
       local node="${broker_nodes[$i]}"
       export STRIMZI_BROKER_ID="$i"
       export STRIMZI_BROKER_NODE="$node"
       export STRIMZI_BROKER_DISK_SIZE="${STRIMZI_BROKER_STORAGE_SIZE:-5Gi}"
 
-      if [[ $i -gt 0 ]]; then
+      if [[ "$first_broker" == "false" ]]; then
         echo "---" >> "$broker_pvs_file"
       fi
+      first_broker=false
       envsubst < "strimzi/$STRIMZI_BROKER_VOLUMES_FILE" >> "$broker_pvs_file"
     done
 
