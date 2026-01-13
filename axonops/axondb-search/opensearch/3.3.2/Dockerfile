@@ -97,6 +97,7 @@ RUN microdnf install -y --nodocs \
     tar \
     gzip \
     wget \
+    jq \
     && microdnf clean all \
     && rm -rf /var/cache/yum /var/cache/dnf
 
