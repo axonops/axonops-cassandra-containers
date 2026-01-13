@@ -138,12 +138,6 @@ backups:
   # repoSettings: '{"bucket":"my-bucket","region":"us-east-1"}'
   repoSettings: ""
 
-# OpenSearch initial admin password
-# Chart version 2.18.0 and App Version OpenSearch 2.12.0 onwards a custom strong password needs to be provided in order to setup demo admin user.
-# Cluster will not spin-up without this unless demo config install is disabled.
-# This value will be stored in a Kubernetes Secret and passed as an environment variable to the pod
-opensearchInitialAdminPassword: ""
-
 # Extra environment variables to append to this nodeGroup
 # This will be appended to the current 'env:' key. You can use any of the kubernetes env
 # syntax here
@@ -186,6 +180,16 @@ labels: {}
 
 opensearchJavaOps: ""
 opensearchHeapSize: "2g"
+
+# Authentication Configuration
+# You can provide OpenSearch credentials via a Kubernetes secret.
+# The secret must contain the following keys:
+#   - AXONOPS_SEARCH_USER: OpenSearch username
+#   - AXONOPS_SEARCH_PASSWORD: OpenSearch password
+#
+# kubectl create secret generic -n axonops timeseries-credentials \
+# --from-literal=AXONOPS_SEARCH_USER=axonops \
+# --from-literal=AXONOPS_SEARCH_PASSWORD=secure-password
 
 authentication:
   opensearch_user: ""

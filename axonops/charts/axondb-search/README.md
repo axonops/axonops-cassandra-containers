@@ -179,9 +179,6 @@ singleNode: true
 
 opensearchHeapSize: "2g"
 
-# Set initial admin password
-opensearchInitialAdminPassword: "YourSecurePassword123!"
-
 authentication:
   opensearch_user: "axonops"
   opensearch_password: "your-secure-password"
@@ -192,9 +189,9 @@ authentication:
 First, create a Kubernetes secret:
 
 ```bash
-kubectl create secret generic axondb-search-credentials \
-  --from-literal=OPENSEARCH_USER=axonops \
-  --from-literal=OPENSEARCH_PASSWORD=your-secure-password
+kubectl create secret generic -n axonops axondb-search-credentials \
+  --from-literal=AXONOPS_SEARCH_USER=axonops \
+  --from-literal=AXONOPS_SEARCH_PASSWORD=secure-password
 ```
 
 Then create your values file:
@@ -205,9 +202,6 @@ replicas: 1
 singleNode: true
 
 opensearchHeapSize: "2g"
-
-# Set initial admin password (required for security)
-opensearchInitialAdminPassword: "YourSecureAdminPassword123!"
 
 authentication:
   opensearch_secret: "axondb-search-credentials"
@@ -240,7 +234,6 @@ replicas: 1
 singleNode: true
 
 opensearchHeapSize: "2g"
-opensearchInitialAdminPassword: "YourSecureAdminPassword123!"
 
 # Enable HTTPS protocol
 protocol: https
@@ -291,7 +284,6 @@ replicas: 1
 singleNode: true
 
 opensearchHeapSize: "2g"
-opensearchInitialAdminPassword: "YourSecureAdminPassword123!"
 
 # Enable HTTPS protocol
 protocol: https
@@ -328,7 +320,6 @@ replicas: 1
 singleNode: true
 
 opensearchHeapSize: "2g"
-opensearchInitialAdminPassword: "YourSecureAdminPassword123!"
 
 # Enable HTTPS protocol
 protocol: https
@@ -402,9 +393,6 @@ roles:
 # Heap size per node
 opensearchHeapSize: "4g"
 
-# Initial admin password (required)
-opensearchInitialAdminPassword: "YourSecureAdminPassword123!"
-
 # Resource allocation per node
 resources:
   requests:
@@ -474,9 +462,6 @@ roles:
 
 # Heap size (50% of container memory)
 opensearchHeapSize: "8g"
-
-# Initial admin password (required for security)
-opensearchInitialAdminPassword: "ChangeThisSecurePassword123!"
 
 # Authentication using Kubernetes secrets
 authentication:
@@ -646,7 +631,6 @@ curl -k -u admin:ChangeThisSecurePassword123! https://localhost:9200/_cluster/he
 | `replicas` | Number of search database replicas | `1` |
 | `singleNode` | Enable single-node mode (disables clustering) | `true` |
 | `opensearchHeapSize` | JVM heap size | `2g` |
-| `opensearchInitialAdminPassword` | Initial admin password (required) | `""` |
 | `image.repository` | Container image repository | `ghcr.io/axonops/development/axondb-search` |
 | `image.tag` | Container image tag | `""` (uses appVersion) |
 | `authentication.opensearch_user` | Username (dev only) | `""` |
@@ -672,7 +656,6 @@ curl -k -u admin:ChangeThisSecurePassword123! https://localhost:9200/_cluster/he
 - `singleNode: false` - Use for production, allows multiple replicas for high availability
 
 **Security:**
-- `opensearchInitialAdminPassword` is required for security (version 2.12.0+)
 - Always use Kubernetes secrets for credentials in production
 - Enable TLS for production deployments
 
@@ -750,7 +733,6 @@ extraEnvs:
 | networkPolicy.create | bool | `false` | Create network policy |
 | nodeSelector | object | `{}` | Node labels for pod assignment |
 | opensearchHeapSize | string | `"2g"` | JVM heap size |
-| opensearchInitialAdminPassword | string | `""` | Initial admin password (required) |
 | opensearchJavaOps | string | `""` | Additional Java options |
 | persistence.enabled | bool | `true` | Enable persistent storage |
 | persistence.size | string | `"8Gi"` | Size of data volume |
@@ -842,7 +824,6 @@ kubectl logs axondb-search-cluster-master-0
 
 Common causes:
 - Insufficient memory (increase `opensearchHeapSize` and `resources.limits.memory`)
-- Missing admin password (`opensearchInitialAdminPassword` is required)
 - Storage provisioning issues (check PVC status with `kubectl get pvc`)
 - VM max map count not set (enable `sysctlInit.enabled: true`)
 
