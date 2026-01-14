@@ -15,7 +15,6 @@ if [ "${DEBUG:-false}" = "true" ]; then
     set -x
 fi
 
-set -a
 # Default values
 BACKUP_SOURCE_DIR="${BACKUP_VOLUME:-/backup}"
 RCLONE_FLAGS="${RCLONE_FLAGS:---verbose --stats 60s}"
@@ -28,12 +27,20 @@ RCLONE_FLAGS+=" $( [ "$RCLONE_BWLIMIT_KB" -gt 0 ] && echo "--bwlimit ${RCLONE_BW
 RCLONE_REMOTE_NAME="CASS"
 BACKUP_INITIAL_DELAY_SECONDS=${BACKUP_INITIAL_DELAY_SECONDS:-300}
 
+set -a
 RCLONE_CONFIG_CASS_TYPE=s3
 RCLONE_CONFIG_CASS_PROVIDER=AWS
-RCLONE_CONFIG_CASS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
-RCLONE_CONFIG_CASS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+if [ -n "${AWS_ACCESS_KEY_ID:-}" ] && [ -n "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+    RCLONE_CONFIG_CASS_ENV_AUTH=true
+    RCLONE_CONFIG_CASS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+    RCLONE_CONFIG_CASS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+else
+    RCLONE_CONFIG_CASS_ENV_AUTH=false
+fi
 RCLONE_CONFIG_CASS_REGION=${AWS_REGION:-us-east-1}
 set +a
+
+TEST_MODE=${TEST_MODE:-false}
 
 # Colors for output
 RED='\033[0;31m'
@@ -207,6 +214,12 @@ main() {
         log_error "=== Backup Script Failed ==="
     fi
 }
+
+if [ "${TEST_MODE}" = "true" ]; then
+    log_info "Running in TEST MODE. Exiting after checks."
+    check_requirements
+    exit 0
+fi
 
 # Handle script termination
 trap 'log_error "Script interrupted"; exit 130' INT TERM
