@@ -251,6 +251,7 @@ readinessProbe:
 # Persistence configuration for Cassandra data
 persistence:
   # Enable persistent storage for Cassandra
+  # This should generally be enabled in production environments
   enabled: true
 
   # Data volume configuration
@@ -298,6 +299,13 @@ persistence:
 
     # Mount path for commitlog volume
     mountPath: /var/lib/cassandra/commitlog
+
+
+# Restore from Backup
+# ====================
+# Name of an existing backup to restore from on initial deployment
+# e.g., data_backup-20260114-102241
+restoreFromBackup: ""
 
 # Backup Configuration
 # ====================
@@ -399,28 +407,29 @@ backup:
     # Example: "--exclude=*.tmp --exclude=*.log"
     extraOpts: ""
 
-  # rclone configuration for remote backup storage
-  rclone:
-    # Enable rclone remote backup
+  # configuration for remote backup storage
+  remote:
+    # Enable remote backup
     enabled: false
 
-    # Remote storage configuration
-    remote:
-      # Name of the configured rclone remote (e.g., "s3", "gcs", "azure")
-      # Must match an existing rclone configuration
-      name: ""
+    # Rclone image configuration
+    image:
+      repository: ttl.sh/timeseries-backups
+      tag: 24h
+      pullPolicy: Always
 
-      # Path in the remote storage (e.g., "my-bucket/cassandra-backups")
-      path: ""
+    # Sync interval in seconds (how often to sync to remote)
+    # Default: 3600 (1 hour)
+    syncIntervalSeconds: 3600
 
-    # Additional rclone flags (e.g., "--verbose --stats 60s")
-    flags: "--verbose --stats 60s"
+    # Initial delay before starting the first backup (seconds)
+    initialDelaySeconds: 300
 
-    # Verify backup after upload
-    verify: false
+    # Name of this configuration
+    name: ""
 
-    # Create LATEST.txt marker file
-    createLatestMarker: true
+    # Path in the remote storage (e.g., "my-bucket/cassandra-backups")
+    path: ""
 
     # Remote retention settings
     # Number of days to retain backups in remote storage
@@ -428,14 +437,12 @@ backup:
     retentionDays: ""
 
     # Authentication method
-    # Options: "env" (environment variables), "config" (rclone config file), "service-account" (GCP/AWS IAM)
+    # Options: "env" (environment variables), "config" (config file), "service-account" (GCP/AWS IAM)
     authMethod: "env"
 
-    # Secret containing rclone configuration or credentials
+    # Secret containing configuration or credentials
     # Required keys depend on authMethod:
     # - env: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY or equivalent
-    # - config: rclone.conf (complete rclone configuration file)
-    # - service-account: service-account.json or similar
     secretName: ""
 
     # Resource limits for rclone operations
@@ -453,10 +460,6 @@ backup:
 
     # Additional environment variables for rclone
     extraEnvVars: []
-      # - name: RCLONE_CONFIG_S3_TYPE
-      #   value: "s3"
-      # - name: RCLONE_CONFIG_S3_PROVIDER
-      #   value: "AWS"
 
   # Cleanup configuration
   cleanup:
