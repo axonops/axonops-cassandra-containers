@@ -273,6 +273,56 @@ spec:
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+        {{- if .Values.backup.remote.enabled }}
+        # Remote backup sidecar using rclone
+        - name: backup-sync
+          image: "{{ .Values.backup.remote.image.repository }}:{{ .Values.backup.remote.image.tag | default "latest" }}"
+          imagePullPolicy: {{ .Values.backup.remote.image.pullPolicy | default "IfNotPresent" }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: BACKUP_VOLUME
+              value: {{ .Values.backup.volume.mountPath | default "/backup" }}
+            - name: RCLONE_REMOTE_PATH
+              value: {{ .Values.backup.remote.path | quote }}
+            - name: SYNC_INERVAL_SECONDS
+              value: {{ .Values.backup.remote.syncIntervalSeconds | default 3600 | quote }}
+            - name: BWLIMIT_KB
+              value: {{ .Values.backup.rsync.bwLimitKB | default 0 | quote }}
+            - name: BACKUP_INITIAL_DELAY_SECONDS
+              value: {{ .Values.backup.remote.initialDelaySeconds | default 300 | quote }}
+            {{- if .Values.backup.remote.retentionDays }}
+            - name: REMOTE_RETENTION_DAYS
+              value: {{ .Values.backup.remote.retentionDays | quote }}
+            {{- end }}
+            {{- with .Values.backup.remote.extraEnvVars }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if .Values.backup.remote.secretName }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.backup.remote.secretName }}
+          {{- end }}
+          {{- with .Values.backup.remote.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: backup
+              mountPath: {{ .Values.backup.volume.mountPath | default "/backup" }}
+              readOnly: true
+            {{- if eq .Values.backup.remote.authMethod "config" }}
+            - name: rclone-config
+              mountPath: /config/rclone
+              readOnly: true
+            {{- end }}
+        {{- end }}
       volumes:
         {{- if .Values.tls.enabled }}
         # TLS/SSL certificate volumes
@@ -321,15 +371,10 @@ spec:
           emptyDir: {}
         {{- end }}
         {{- end }}
-        {{- if .Values.backup.enabled }}
-        {{- if .Values.backup.volume.existingClaim }}
+        {{- if and .Values.backup.enabled .Values.backup.volume.existingClaim }}
         - name: backup
           persistentVolumeClaim:
             claimName: {{ .Values.backup.volume.existingClaim }}
-        {{- else }}
-        - name: backup
-          emptyDir: {}
-        {{- end }}
         {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
@@ -346,9 +391,9 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-  {{- if .Values.persistence.enabled }}
+  {{- if or .Values.persistence.enabled (and .Values.backup.enabled (not .Values.backup.volume.existingClaim)) }}
   volumeClaimTemplates:
-    {{- if not .Values.persistence.data.existingClaim }}
+    {{- if and .Values.persistence.enabled (not .Values.persistence.data.existingClaim) }}
     - metadata:
         name: data
         labels:
@@ -371,7 +416,7 @@ spec:
           requests:
             storage: {{ .Values.persistence.data.size | default "10Gi" }}
     {{- end }}
-    {{- if and .Values.persistence.commitlog.enabled (not .Values.persistence.commitlog.existingClaim) }}
+    {{- if and .Values.persistence.enabled .Values.persistence.commitlog.enabled (not .Values.persistence.commitlog.existingClaim) }}
     - metadata:
         name: commitlog
         labels:

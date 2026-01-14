@@ -8,17 +8,28 @@
 # Optional environment variables:
 #   BACKUP_SOURCE_DIR: Source directory (default: /backups)
 #   RCLONE_FLAGS: Additional rclone flags (default: "--verbose --stats 60s")
-#   BACKUP_RETENTION_DAYS: Number of days to retain old backups (optional)
+#   REMOTE_RETENTION_DAYS: Number of days to retain old backups (optional)
 
 set -euo pipefail
-
+set -a
 # Default values
-BACKUP_SOURCE_DIR="${BACKUP_VOLUME:-/backups}"
+BACKUP_SOURCE_DIR="${BACKUP_VOLUME:-/backup}"
 RCLONE_FLAGS="${RCLONE_FLAGS:---verbose --stats 60s}"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 HOSTNAME="${HOSTNAME:-$(hostname)}"
-RCLONE_REMOTE_NAME="${RCLONE_REMOTE_NAME:-CASS}"
-BACKUP_RETENTION_DAYS="${SNAPSHOT_RETENTION_DAYS:-7}"
+REMOTE_RETENTION_DAYS="${SNAPSHOT_RETENTION_DAYS:-7}"
+SYNC_INERVAL_SECONDS="${SYNC_INTERVAL_SECONDS:-3600}"
+RCLONE_BWLIMIT_KB="${BWLIMIT_KB:-0}"
+RCLONE_FLAGS+=" $( [ "$RCLONE_BWLIMIT_KB" -gt 0 ] && echo "--bwlimit ${RCLONE_BWLIMIT_KB}k" || echo "" )"
+RCLONE_REMOTE_NAME="CASS"
+BACKUP_INITIAL_DELAY_SECONDS=${BACKUP_INITIAL_DELAY_SECONDS:-300}
+
+RCLONE_CONFIG_CASS_TYPE=s3
+RCLONE_CONFIG_CASS_PROVIDER=AWS
+RCLONE_CONFIG_CASS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+RCLONE_CONFIG_CASS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+RCLONE_CONFIG_CASS_REGION=${AWS_REGION:-us-east-1}
+set +a
 
 # Colors for output
 RED='\033[0;31m'
@@ -74,7 +85,7 @@ check_requirements() {
 # Perform the backup
 perform_backup() {
     local source="$BACKUP_SOURCE_DIR"
-    local destination="${RCLONE_REMOTE_NAME}:${RCLONE_REMOTE_PATH}/${HOSTNAME}/${TIMESTAMP}"
+    local destination="${RCLONE_REMOTE_NAME}:${RCLONE_REMOTE_PATH}/${HOSTNAME}"
 
     log_info "Starting backup from $source to $destination"
     log_info "Using rclone flags: $RCLONE_FLAGS"
@@ -82,7 +93,7 @@ perform_backup() {
     # Check if source directory has content
     if [ -z "$(ls -A "$source" 2>/dev/null)" ]; then
         log_warning "Source directory $source is empty. Nothing to backup."
-        exit 0
+        return 0
     fi
 
     # Count files to backup
@@ -108,15 +119,15 @@ perform_backup() {
 
 # Clean up old backups based on retention policy
 cleanup_old_backups() {
-    if [ -z "${BACKUP_RETENTION_DAYS:-}" ]; then
-        log_info "No retention policy set (BACKUP_RETENTION_DAYS not defined)"
+    if [ -z "${REMOTE_RETENTION_DAYS:-}" ]; then
+        log_info "No retention policy set (REMOTE_RETENTION_DAYS not defined)"
         return 0
     fi
 
-    log_info "Cleaning up backups older than $BACKUP_RETENTION_DAYS days"
+    log_info "Cleaning up backups older than $REMOTE_RETENTION_DAYS days"
 
-    local cutoff_date=$(date -d "${BACKUP_RETENTION_DAYS} days ago" +%Y%m%d 2>/dev/null || \
-                       date -v-${BACKUP_RETENTION_DAYS}d +%Y%m%d 2>/dev/null || \
+    local cutoff_date=$(date -d "${REMOTE_RETENTION_DAYS} days ago" +%Y%m%d 2>/dev/null || \
+                       date -v-${REMOTE_RETENTION_DAYS}d +%Y%m%d 2>/dev/null || \
                        echo "")
 
     if [ -z "$cutoff_date" ]; then
@@ -125,12 +136,14 @@ cleanup_old_backups() {
     fi
 
     # List and remove old backup directories
+    # Match backup directories like: data_backup-20260114-102241, backup-20260114-102241, etc.
     rclone lsd "${RCLONE_REMOTE_NAME}:${RCLONE_REMOTE_PATH}/${HOSTNAME}" 2>/dev/null | \
     while read -r size date time name; do
-        if [[ "$name" =~ ^[0-9]{8}_[0-9]{6}$ ]]; then
-            backup_date="${name:0:8}"
+        # Match backup directories containing date pattern YYYYMMDD
+        if [[ "$name" =~ backup.*-([0-9]{8})-[0-9]{6}$ ]]; then
+            backup_date="${BASH_REMATCH[1]}"
             if [[ "$backup_date" < "$cutoff_date" ]]; then
-                log_info "Removing old backup: $name"
+                log_info "Removing old backup: $name (date: $backup_date)"
                 rclone purge "${RCLONE_REMOTE_NAME}:${RCLONE_REMOTE_PATH}/${HOSTNAME}/$name" || \
                     log_warning "Failed to remove old backup: $name"
             fi
@@ -144,7 +157,7 @@ verify_backup() {
         return 0
     fi
 
-    local destination="${RCLONE_REMOTE_NAME}:${RCLONE_REMOTE_PATH}/${HOSTNAME}/${TIMESTAMP}"
+    local destination="${RCLONE_REMOTE_NAME}:${RCLONE_REMOTE_PATH}/${HOSTNAME}"
     log_info "Verifying backup at $destination"
 
     local remote_count=$(rclone ls "$destination" 2>/dev/null | wc -l)
@@ -174,7 +187,7 @@ main() {
     log_info "Testing rclone configuration..."
     if ! rclone lsd "${RCLONE_REMOTE_NAME}:" &>/dev/null; then
         log_error "Failed to connect to remote storage. Please check rclone configuration."
-        exit 1
+        return 1
     fi
 
     # Perform backup
@@ -186,15 +199,22 @@ main() {
         cleanup_old_backups
 
         log_info "=== Backup Script Completed Successfully ==="
-        exit 0
     else
         log_error "=== Backup Script Failed ==="
-        exit 1
     fi
 }
 
 # Handle script termination
 trap 'log_error "Script interrupted"; exit 130' INT TERM
 
+# Wait before starting the first backup
+log_info "Waiting ${BACKUP_INITIAL_DELAY_SECONDS} seconds before starting the first backup..."
+sleep ${BACKUP_INITIAL_DELAY_SECONDS}
+
 # Run main function
-main "$@"
+while true; do
+    log_info "Starting backup cycle"
+    main "$@"
+    log_info "Backup cycle completed, sleeping for $SYNC_INERVAL_SECONDS seconds"
+    sleep "$SYNC_INERVAL_SECONDS"
+done
