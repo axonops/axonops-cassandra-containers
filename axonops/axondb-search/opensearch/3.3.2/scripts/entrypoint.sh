@@ -255,6 +255,25 @@ ${NODES_DN_SECTION}
     echo "  ✓ Configured $(echo "${DN_ARRAY[@]}" | wc -w) node DN(s)"
 fi
 
+# Display security configuration
+if [ "$DISABLE_SECURITY_PLUGIN" = "true" ]; then
+    echo "⚠ WARNING: Security plugin disabled (DISABLE_SECURITY_PLUGIN=true)"
+    echo "  This is NOT recommended for production!"
+
+    yq eval 'del(.plugins.security.authcz.admin_dn)' -i /etc/opensearch/opensearch.yml
+    yq eval 'del(plugins.security.nodes_dn)' -i /etc/opensearch/opensearch.yml
+
+    # Remove security plugin settings from opensearch.yml to avoid confusion
+    sed -i '/plugins.security/d' /etc/opensearch/opensearch.yml
+    echo "plugins.security.disabled: true" >> /etc/opensearch/opensearch.yml
+elif [ -n "$AXONOPS_SEARCH_USER" ]; then
+    echo "✓ Security enabled with custom admin user: $AXONOPS_SEARCH_USER"
+else
+    echo "✓ Security enabled with default admin user"
+    echo "  Default credentials: admin / MyS3cur3P@ss2025"
+fi
+echo ""
+
 # Disable SSL completely if AXONOPS_SEARCH_TLS_ENABLED=false
 # This disables both HTTP and transport SSL (no certificates required)
 # Use this for development/testing or when running behind a secure network
@@ -533,22 +552,6 @@ EOF
     echo "  ✓ ONLY custom user will exist (no default admin)"
     echo ""
 fi
-
-# Display security configuration
-if [ "$DISABLE_SECURITY_PLUGIN" = "true" ]; then
-    echo "⚠ WARNING: Security plugin disabled (DISABLE_SECURITY_PLUGIN=true)"
-    echo "  This is NOT recommended for production!"
-
-    # Remove security plugin settings from opensearch.yml to avoid confusion
-    sed -i '/plugins.security/d' /etc/opensearch/opensearch.yml
-    echo "plugins.security.disabled: true" >> /etc/opensearch/opensearch.yml
-elif [ -n "$AXONOPS_SEARCH_USER" ]; then
-    echo "✓ Security enabled with custom admin user: $AXONOPS_SEARCH_USER"
-else
-    echo "✓ Security enabled with default admin user"
-    echo "  Default credentials: admin / MyS3cur3P@ss2025"
-fi
-echo ""
 
 # Write semaphore file immediately (no background init script needed)
 mkdir -p ${OPENSEARCH_DATA_DIR}/.axonops

@@ -146,6 +146,29 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then \
     /usr/share/opensearch/bin/opensearch-plugin install --batch repository-gcs && \
     /usr/share/opensearch/bin/opensearch-plugin install --batch repository-azure
 
+# Get yq, this will be used to modify the opensearch.yaml if needed
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        YQ_ARCH="amd64"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        YQ_ARCH="arm64"; \
+    else \
+        echo "ERROR: Unsupported architecture: $ARCH" && exit 1; \
+    fi && \
+    wget -q -O /tmp/checksums.txt https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/checksums-bsd && \
+    wget -q -O /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_${YQ_ARCH} && \
+    # Extract expected hash from checksums.txt and compare only the hash portion
+    EXPECTED_SHA256=$(grep "SHA256 (yq_linux_${YQ_ARCH})" /tmp/checksums.txt | awk '{print $4}') && \
+    LOCAL_SHA256=$(sha256sum /usr/local/bin/yq | awk '{print $1}') && \
+    if [ "${EXPECTED_SHA256}" != "${LOCAL_SHA256}" ]; then \
+      echo "ERROR: Checksum failed for yq_linux_${YQ_ARCH}" >&2; \
+      echo "Expected: ${EXPECTED_SHA256}" >&2; \
+      echo "Got     : ${LOCAL_SHA256}" >&2; \
+      exit 1; \
+    fi && \
+    chmod +x /usr/local/bin/yq && \
+    rm -f /tmp/checksums.txt
+
 # Overlay our custom config files to /etc/opensearch (before SSL setup)
 COPY --chown=opensearch:root config/jvm.options /etc/opensearch/jvm.options
 COPY --chown=opensearch:root config/log4j2.properties /etc/opensearch/log4j2.properties
