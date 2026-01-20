@@ -311,7 +311,7 @@ restoreFromBackup: ""
 # Configuration for Cassandra snapshot-based backups with rsync deduplication
 # NOTE: AxonDB Timeseries is designed for single-node deployments only.
 # Multi-node clusters are not supported for backup operations.
-backup:
+backups:
   # Enable backup functionality
   enabled: false
 

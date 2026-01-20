@@ -1,4 +1,4 @@
-{{- if and (eq .Values.backups.target.type "local") (not .Values.backups.target.local.existingClaim) }}
+{{- if and .Values.backups.enabled (eq .Values.backups.target.type "local") (not .Values.backups.target.local.existingClaim) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

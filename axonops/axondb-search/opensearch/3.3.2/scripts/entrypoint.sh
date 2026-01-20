@@ -264,12 +264,9 @@ if [ "$AXONOPS_SEARCH_TLS_ENABLED" = "false" ]; then
     echo "  Transport SSL: disabled"
     echo "  ⚠ WARNING: Not recommended for production!"
 
-    sed -i '/plugins.security.ssl/d' /etc/opensearch/opensearch.yml
+    sed -i '/plugins.security.ssl.http/d' /etc/opensearch/opensearch.yml
 
     echo "plugins.security.ssl.http.enabled: false" >> /etc/opensearch/opensearch.yml
-
-    echo "plugins.security.ssl.transport.enabled: false" >> /etc/opensearch/opensearch.yml
-    echo "plugins.security.disabled: true" >> /etc/opensearch/opensearch.yml
 fi
 
 # Apply SSL/TLS certificate paths based on environment variables (only if TLS is enabled)
@@ -320,7 +317,8 @@ GENERATE_CERTS_ON_STARTUP="${GENERATE_CERTS_ON_STARTUP:-true}"
 CERT_SEMAPHORE="${OPENSEARCH_DATA_DIR}/.axonops/generate-certs.done"
 CERT_FILE=${OPENSEARCH_TLS_CERT_PATH:-${OPENSEARCH_PATH_CONF}/certs/axondbsearch-default-node.pem}
 
-if [ "$GENERATE_CERTS_ON_STARTUP" = "true" ] && [ "$AXONOPS_SEARCH_TLS_ENABLED" != "false" ]; then
+# We always needs certs, at the very least for transport or we can't enable the security plugin
+if [ "$GENERATE_CERTS_ON_STARTUP" = "true" ] || [ "$AXONOPS_SEARCH_TLS_ENABLED" = "false" ]; then
     echo "=== Certificate Generation (Runtime) ==="
 
     if [ ! -f "$CERT_FILE" ]; then
@@ -540,6 +538,10 @@ fi
 if [ "$DISABLE_SECURITY_PLUGIN" = "true" ]; then
     echo "⚠ WARNING: Security plugin disabled (DISABLE_SECURITY_PLUGIN=true)"
     echo "  This is NOT recommended for production!"
+
+    # Remove security plugin settings from opensearch.yml to avoid confusion
+    sed -i '/plugins.security/d' /etc/opensearch/opensearch.yml
+    echo "plugins.security.disabled: true" >> /etc/opensearch/opensearch.yml
 elif [ -n "$AXONOPS_SEARCH_USER" ]; then
     echo "✓ Security enabled with custom admin user: $AXONOPS_SEARCH_USER"
 else
@@ -567,14 +569,6 @@ echo ""
 # e.g. Setting the env var cluster.name=testcluster
 # will cause OpenSearch to be invoked with -Ecluster.name=testcluster
 opensearch_opts=()
-
-# Handle special OpenSearch control variables (not dotted notation)
-# These need to be handled before the general environment variable parsing
-if [ "$DISABLE_SECURITY_PLUGIN" = "true" ]; then
-    echo "Security plugin disabled (DISABLE_SECURITY_PLUGIN=true)"
-    opensearch_opt="-Eplugins.security.disabled=true"
-    opensearch_opts+=("${opensearch_opt}")
-fi
 
 # Parse environment variables with dotted notation
 while IFS='=' read -r envvar_key envvar_value
