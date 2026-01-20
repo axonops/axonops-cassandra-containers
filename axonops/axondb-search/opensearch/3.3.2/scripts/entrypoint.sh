@@ -273,7 +273,7 @@ if [ "$DISABLE_SECURITY_PLUGIN" = "true" ]; then
     yq eval 'del(.plugins.security.nodes_dn)' -i /etc/opensearch/opensearch.yml
 
     # Remove security plugin settings from opensearch.yml to avoid confusion
-    sed -i '/plugins.security/d' /etc/opensearch/opensearch.yml
+    # sed -i '/plugins.security/d' /etc/opensearch/opensearch.yml
     echo "plugins.security.disabled: true" >> /etc/opensearch/opensearch.yml
 elif [ -n "$AXONOPS_SEARCH_USER" ]; then
     echo "✓ Security enabled with custom admin user: $AXONOPS_SEARCH_USER"
