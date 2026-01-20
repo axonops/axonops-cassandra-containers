@@ -251,7 +251,7 @@ spec:
         secret:
           secretName: {{ .Values.securityConfig.tenantsSecret }}
       {{- end }}
-      {{- if eq .Values.backups.target.type "local" }}
+      {{- if and .Values.backups.enabled (eq .Values.backups.target.type "local") }}
       - name: backups
         persistentVolumeClaim:
           claimName: {{ .Values.backups.target.local.existingClaim | default (printf "%s-backups" (include "opensearch.uname" .)) }}
@@ -431,7 +431,19 @@ spec:
           value: "{{ template "opensearch.roles" . }}"
         - name: OPENSEARCH_JAVA_OPTS
           value: "{{ .Values.opensearchJavaOps }}"
-      {{- if .Values.authentication.opensearch_secret }}
+      {{- if .Values.vals.enabled }}
+        # Authentication credentials from vals-operator managed secret
+        - name: AXONOPS_SEARCH_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "opensearch.uname" . }}-vals
+              key: AXONOPS_SEARCH_USER
+        - name: AXONOPS_SEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "opensearch.uname" . }}-vals
+              key: AXONOPS_SEARCH_PASSWORD
+      {{- else if .Values.authentication.opensearch_secret }}
         # Authentication credentials from secret
         - name: AXONOPS_SEARCH_USER
           valueFrom:
@@ -450,11 +462,11 @@ spec:
         - name: AXONOPS_SEARCH_PASSWORD
           value: {{ .Values.authentication.opensearch_password | quote }}
       {{- end }}
-      {{- if eq .Values.backups.target.type "local" }}
+      {{- if and .Values.backups.enabled (eq .Values.backups.target.type "local") }}
         - name: AXONOPS_SEARCH_BACKUP_PATH
           value: {{ .Values.backups.target.local.path }}
       {{- end }}
-      {{- if eq .Values.backups.target.type "s3" }}
+      {{- if and .Values.backups.enabled (eq .Values.backups.target.type "s3") }}
         - name: AXONOPS_SEARCH_BACKUP_TARGET
           value: "s3"
         - name: AXONOPS_SEARCH_BACKUP_S3_BUCKET
@@ -480,7 +492,7 @@ spec:
           value: "true"
         {{- end }}
       {{- end }}
-      {{- if and (eq .Values.backups.target.type "s3") (or .Values.backups.target.s3.credentials.existingSecret (and .Values.backups.target.s3.credentials.accessKeyId .Values.backups.target.s3.credentials.secretAccessKey)) }}
+      {{- if and .Values.backups.enabled (eq .Values.backups.target.type "s3") (or .Values.backups.target.s3.credentials.existingSecret (and .Values.backups.target.s3.credentials.accessKeyId .Values.backups.target.s3.credentials.secretAccessKey)) }}
         # AWS credentials for S3 backups
         {{- if .Values.backups.target.s3.credentials.existingSecret }}
         - name: AWS_ACCESS_KEY_ID
@@ -527,6 +539,7 @@ spec:
       {{- else if .Values.tls.enabled }}
         # TLS/SSL Environment Variables
         {{- if .Values.tls.certManager.enabled }}
+        # cert-manager: keystore password from dedicated secret (regular or ValsSecret)
         - name: GENERATE_CERTS_ON_STARTUP
           value: "false"
         - name: OPENSEARCH_KEYSTORE_PATH
@@ -669,7 +682,7 @@ spec:
           subPath: {{ $path }}
         {{- end -}}
         {{- end -}}
-        {{- if eq .Values.backups.target.type "local" }}
+        {{- if and .Values.backups.enabled (eq .Values.backups.target.type "local") }}
         - name: backups
           mountPath: {{ .Values.backups.target.local.path }}
         {{- end }}

@@ -8,6 +8,8 @@ MODE="${1:-readiness}"
 HTTP_PORT="${OPENSEARCH_HTTP_PORT:-9200}"
 TIMEOUT="${HEALTH_CHECK_TIMEOUT:-10}"
 OPENSEARCH_DATA_DIR="${OPENSEARCH_DATA_DIR:-/var/lib/opensearch}"
+AXONOPS_SEARCH_USER="${AXONOPS_SEARCH_USER:-}"
+AXONOPS_SEARCH_PASSWORD="${AXONOPS_SEARCH_PASSWORD:-}"
 
 # Determine protocol (HTTP or HTTPS) based on TLS setting
 AXONOPS_SEARCH_TLS_ENABLED="${AXONOPS_SEARCH_TLS_ENABLED:-true}"
@@ -15,6 +17,12 @@ if [ "$AXONOPS_SEARCH_TLS_ENABLED" = "false" ]; then
   PROTOCOL="http"
 else
   PROTOCOL="https"
+fi
+
+# Set authentication options if security plugin is enabled
+CURL_OPTS=""
+if ! grep -q '^plugins.security.disabled: true' /etc/opensearch/opensearch.yml; then
+  CURL_OPTS="-u ${AXONOPS_SEARCH_USER:-admin}:${AXONOPS_SEARCH_PASSWORD:-MyS3cur3P@ss2025}"
 fi
 
 log() {
@@ -54,8 +62,8 @@ case "$MODE" in
       exit 1
     fi
 
-    # Check security plugin health endpoint (lightweight, no auth required)
-    SECURITY_HEALTH=$(timeout "$TIMEOUT" curl -s --insecure "${PROTOCOL}://localhost:${HTTP_PORT}/_plugins/_security/health" 2>/dev/null || echo "")
+    # Check security plugin health endpoint
+    SECURITY_HEALTH=$(timeout "$TIMEOUT" curl -s --insecure $CURL_OPTS "${PROTOCOL}://localhost:${HTTP_PORT}/_plugins/_security/health" 2>/dev/null || echo "")
     if [ -z "$SECURITY_HEALTH" ] || ! echo "$SECURITY_HEALTH" | grep -q "message"; then
       log "Security health endpoint not responding"
       exit 1
@@ -82,8 +90,8 @@ case "$MODE" in
       exit 1
     fi
 
-    # Check security plugin health endpoint (lightweight, no auth required)
-    SECURITY_HEALTH=$(timeout "$TIMEOUT" curl -s --insecure "${PROTOCOL}://localhost:${HTTP_PORT}/_plugins/_security/health" 2>/dev/null || echo "")
+    # Check security plugin health endpoint
+    SECURITY_HEALTH=$(timeout "$TIMEOUT" curl -s --insecure $CURL_OPTS "${PROTOCOL}://localhost:${HTTP_PORT}/_plugins/_security/health" 2>/dev/null || echo "")
     if [ -z "$SECURITY_HEALTH" ] || ! echo "$SECURITY_HEALTH" | grep -q "message"; then
       log "ERROR: Security health endpoint not responding"
       exit 1
@@ -103,28 +111,10 @@ case "$MODE" in
       exit 1
     fi
 
-    # Determine admin credentials for API access
-    # Priority: Custom user from semaphore (if successfully created) > default admin password
-    INIT_SEMAPHORE="${OPENSEARCH_DATA_DIR}/.axonops/init-security.done"
-    ADMIN_USER="admin"
-    ADMIN_PASSWORD="MyS3cur3P@ss2025"
-
-    if [ -f "$INIT_SEMAPHORE" ]; then
-      # Check if custom user was successfully created (RESULT=success)
-      INIT_RESULT=$(grep "^RESULT=" "$INIT_SEMAPHORE" | cut -d'=' -f2)
-      if [ "$INIT_RESULT" = "success" ] && grep -q "^ADMIN_USER=" "$INIT_SEMAPHORE"; then
-        # Custom user was created successfully, use it
-        ADMIN_USER=$(grep "^ADMIN_USER=" "$INIT_SEMAPHORE" | cut -d'=' -f2)
-        # Use environment variable password
-        if [ -n "$AXONOPS_SEARCH_PASSWORD" ]; then
-          ADMIN_PASSWORD="$AXONOPS_SEARCH_PASSWORD"
-        fi
-      fi
-    fi
-
-    # Make authenticated HTTP GET request to /_cluster/health
+    # Make HTTP GET request to /_cluster/health
     # Note: Using --insecure because we're using demo SSL certificates
-    HEALTH_RESPONSE=$(timeout "$TIMEOUT" curl -s --insecure -u "${ADMIN_USER}:${ADMIN_PASSWORD}" -XGET "${PROTOCOL}://localhost:${HTTP_PORT}/_cluster/health" 2>/dev/null || echo "")
+    # CURL_OPTS contains auth credentials when security plugin is enabled
+    HEALTH_RESPONSE=$(timeout "$TIMEOUT" curl -s --insecure $CURL_OPTS -XGET "${PROTOCOL}://localhost:${HTTP_PORT}/_cluster/health" 2>/dev/null || echo "")
 
     if [ -z "$HEALTH_RESPONSE" ]; then
       log "ERROR: Failed to get cluster health response"
