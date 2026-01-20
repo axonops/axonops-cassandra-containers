@@ -15,7 +15,6 @@ export AXONOPS_ORG_NAME="${AXONOPS_ORG_NAME:-example}"
 export AXONOPS_LICENSE_KEY="${AXONOPS_LICENSE_KEY:-}"
 export AXONOPS_DB_PASSWORD="${AXONOPS_DB_PASSWORD:-axonops}"
 export AXONOPS_SEARCH_PASSWORD="${AXONOPS_SEARCH_PASSWORD:-MyS3cur3P@ss2025}"
-export AXONOPS_DASHBOARD_URL="${AXONOPS_DASHBOARD_URL:-http://localhost:3000}"
 export AXONOPS_CQL_SSL="${AXONOPS_CQL_SSL:-true}"
 
 # Substitute environment variables in template
