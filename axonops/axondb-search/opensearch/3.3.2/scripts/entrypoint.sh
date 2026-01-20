@@ -190,37 +190,46 @@ fi
 # Backup Repository Configuration
 # ============================================================================
 
-: "${AXONOPS_SEARCH_SNAPSHOT_REPO:=axon-backup-repo}"
-: "${AXONOPS_SEARCH_BACKUP_TARGET:=local}"
-: "${AXONOPS_SEARCH_BACKUP_PATH:=/mnt/backups}"  # Fixed typo: was BACKUS_PATH
+# Allow disabling backups entirely
+: "${AXONOPS_SEARCH_ENABLE_BACKUPS:=true}"
 
-echo "=== Backup Configuration ==="
-echo "  Backup Target: ${AXONOPS_SEARCH_BACKUP_TARGET}"
-echo "  Repository Name: ${AXONOPS_SEARCH_SNAPSHOT_REPO}"
+if [ "$AXONOPS_SEARCH_ENABLE_BACKUPS" = "false" ]; then
+    echo "=== Backup Configuration ==="
+    echo "  Backups disabled (AXONOPS_SEARCH_ENABLE_BACKUPS=false)"
+    echo ""
+else
+    : "${AXONOPS_SEARCH_SNAPSHOT_REPO:=axon-backup-repo}"
+    : "${AXONOPS_SEARCH_BACKUP_TARGET:=local}"
+    : "${AXONOPS_SEARCH_BACKUP_PATH:=/mnt/backups}"  # Fixed typo: was BACKUS_PATH
 
-if [ "$AXONOPS_SEARCH_BACKUP_TARGET" = "local" ]; then
-    # Local filesystem backups
-    if [ -d "$AXONOPS_SEARCH_BACKUP_PATH" ]; then  # Fixed: check actual path
-        echo "  Backup Path: ${AXONOPS_SEARCH_BACKUP_PATH}"
-        echo "path.repo: [\"${AXONOPS_SEARCH_BACKUP_PATH}\"]" >> "/etc/opensearch/opensearch.yml"
-        echo "  ✓ Local backup repository path configured"
-    else
-        echo "  WARNING: Backup path not found: ${AXONOPS_SEARCH_BACKUP_PATH}"
-        echo "  Backups will be disabled until path is available"
+    echo "=== Backup Configuration ==="
+    echo "  Backup Target: ${AXONOPS_SEARCH_BACKUP_TARGET}"
+    echo "  Repository Name: ${AXONOPS_SEARCH_SNAPSHOT_REPO}"
+
+    if [ "$AXONOPS_SEARCH_BACKUP_TARGET" = "local" ]; then
+        # Local filesystem backups
+        if [ -d "$AXONOPS_SEARCH_BACKUP_PATH" ]; then  # Fixed: check actual path
+            echo "  Backup Path: ${AXONOPS_SEARCH_BACKUP_PATH}"
+            echo "path.repo: [\"${AXONOPS_SEARCH_BACKUP_PATH}\"]" >> "/etc/opensearch/opensearch.yml"
+            echo "  ✓ Local backup repository path configured"
+        else
+            echo "  WARNING: Backup path not found: ${AXONOPS_SEARCH_BACKUP_PATH}"
+            echo "  Backups will be disabled until path is available"
+        fi
+    elif [ "$AXONOPS_SEARCH_BACKUP_TARGET" = "s3" ]; then
+        # S3 backups - no path.repo needed, configured via repository API
+        echo "  S3 bucket: ${AXONOPS_SEARCH_S3_BUCKET:-not set}"
+        echo "  S3 region: ${AXONOPS_SEARCH_S3_REGION:-auto-detect}"
+        if [ -n "${AXONOPS_SEARCH_S3_ENDPOINT:-}" ]; then
+            echo "  S3 endpoint: ${AXONOPS_SEARCH_S3_ENDPOINT} (S3-compatible storage)"
+        fi
+        if [ "${AXONOPS_SEARCH_S3_PATH_STYLE_ACCESS:-false}" = "true" ]; then
+            echo "  Path style access: enabled (required for some S3-compatible storage)"
+        fi
+        echo "  S3 credentials will be configured via keystore"
     fi
-elif [ "$AXONOPS_SEARCH_BACKUP_TARGET" = "s3" ]; then
-    # S3 backups - no path.repo needed, configured via repository API
-    echo "  S3 bucket: ${AXONOPS_SEARCH_S3_BUCKET:-not set}"
-    echo "  S3 region: ${AXONOPS_SEARCH_S3_REGION:-auto-detect}"
-    if [ -n "${AXONOPS_SEARCH_S3_ENDPOINT:-}" ]; then
-        echo "  S3 endpoint: ${AXONOPS_SEARCH_S3_ENDPOINT} (S3-compatible storage)"
-    fi
-    if [ "${AXONOPS_SEARCH_S3_PATH_STYLE_ACCESS:-false}" = "true" ]; then
-        echo "  Path style access: enabled (required for some S3-compatible storage)"
-    fi
-    echo "  S3 credentials will be configured via keystore"
+    echo ""
 fi
-echo ""
 
 # Apply security nodes DN if env var set (for custom certificate scenarios)
 # Supports multiple DNs separated by semicolon (;)
@@ -403,7 +412,7 @@ fi
 # S3 Repository Plugin and Credential Configuration
 # ============================================================================
 
-if [ "$AXONOPS_SEARCH_BACKUP_TARGET" = "s3" ]; then
+if [ "$AXONOPS_SEARCH_ENABLE_BACKUPS" != "false" ] && [ "$AXONOPS_SEARCH_BACKUP_TARGET" = "s3" ]; then
     echo "=== S3 Backup Configuration ==="
 
     # 1. Check if repository-s3 plugin is installed
