@@ -1,6 +1,6 @@
 # AxonOps Server
 
-![Version: 2.0.0](https://img.shields.io/badge/Version-2.0.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: latest](https://img.shields.io/badge/AppVersion-latest-informational?style=flat-square)
+![Version: 2.1.3](https://img.shields.io/badge/Version-2.1.3-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: latest](https://img.shields.io/badge/AppVersion-latest-informational?style=flat-square)
 
 A Helm chart for deploying the AxonOps Server - the unified observability platform for Apache Cassandra. The AxonOps Server is the central component that collects metrics and logs from Cassandra clusters, stores them in the timeseries and search databases, and provides APIs for the AxonOps Dashboard.
 
@@ -14,6 +14,7 @@ A Helm chart for deploying the AxonOps Server - the unified observability platfo
 - [Installation Examples](#installation-examples)
   - [Basic Installation](#basic-installation)
   - [Installation with External Databases](#installation-with-external-databases)
+  - [Installation with OpenSearch Credentials from Secret](#installation-with-opensearch-credentials-from-secret)
   - [Installation with External Configuration Secret](#installation-with-external-configuration-secret)
   - [Installation with Ingress](#installation-with-ingress)
   - [Installation with TLS/mTLS](#installation-with-tlsmtls)
@@ -246,6 +247,55 @@ Install:
 ```bash
 helm install axon-server ./axon-server -f values-external-dbs.yaml
 ```
+
+### Installation with OpenSearch Credentials from Secret
+
+Instead of storing OpenSearch credentials directly in Helm values, you can reference an external Kubernetes Secret. This approach is recommended for production environments and aligns with the axondb-search chart for compatibility.
+
+Create the credentials secret (must contain keys `AXONOPS_SEARCH_USER` and `AXONOPS_SEARCH_PASSWORD`):
+
+```bash
+kubectl create secret generic opensearch-credentials \
+  --from-literal=AXONOPS_SEARCH_USER=axonops \
+  --from-literal=AXONOPS_SEARCH_PASSWORD=your-secure-password
+```
+
+Configure the Helm values to reference the secret:
+
+```yaml
+# values-search-secret.yaml
+config:
+  org_name: "my-organization"
+  license_key: "YOUR_LICENSE_KEY_HERE"
+
+  extraConfig:
+    cql_hosts:
+      - axondb-timeseries-headless.default.svc.cluster.local
+    cql_username: "axonops"
+    cql_password: "password"
+
+# Search database configuration using external secret
+searchDb:
+  hosts:
+    - https://axondb-search-cluster-master:9200
+  skip_verify: true
+  # Reference the external secret containing credentials
+  search_secret: "opensearch-credentials"
+
+dashboardUrl: "https://axonops.example.com"
+```
+
+Install the chart:
+
+```bash
+helm install axon-server ./axon-server -f values-search-secret.yaml
+```
+
+Important notes:
+
+- When `searchDb.search_secret` is set, the credentials are injected as environment variables (`SEARCH_DB_USERNAME`, `SEARCH_DB_PASSWORD`)
+- The `searchDb.username` and `searchDb.password` values are ignored when using a secret
+- The secret key names (`AXONOPS_SEARCH_USER`, `AXONOPS_SEARCH_PASSWORD`) are compatible with the axondb-search chart, allowing you to share the same secret between both charts
 
 ### Installation with External Configuration Secret
 
@@ -889,6 +939,7 @@ curl http://localhost:8080/api/v1/healthz
 | `config.extraConfig.cql_username` | Cassandra username | `""` |
 | `searchDb.hosts` | Search database hosts | `[]` |
 | `searchDb.username` | Search database username | `""` |
+| `searchDb.search_secret` | Kubernetes secret name containing OpenSearch credentials | `""` |
 | `dashboardUrl` | Public URL for AxonOps Dashboard | `""` |
 | `apiIngress.enabled` | Enable API ingress | `false` |
 | `agentIngress.enabled` | Enable agent ingress | `false` |
@@ -985,6 +1036,7 @@ curl http://localhost:8080/api/v1/healthz
 | resources | object | `{}` | Resource limits and requests |
 | searchDb.hosts | list | `[]` | Search database hosts |
 | searchDb.password | string | `""` | Search database password |
+| searchDb.search_secret | string | `""` | Kubernetes secret name containing OpenSearch credentials (keys: AXONOPS_SEARCH_USER, AXONOPS_SEARCH_PASSWORD) |
 | searchDb.skip_verify | bool | `true` | Skip TLS verification for search DB |
 | searchDb.username | string | `""` | Search database username |
 | securityContext | object | `{"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":false,"runAsNonRoot":true,"runAsUser":9988}` | Container security context |
