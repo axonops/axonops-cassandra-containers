@@ -20,6 +20,16 @@ fullnameOverride: ""
 
 configurationSecret: ""
 
+# Authentication Configuration
+# You can provide OpenSearch credentials via a Kubernetes secret.
+# The secret must contain the following keys:
+#   - AXONOPS_SEARCH_USER: OpenSearch username
+#   - AXONOPS_SEARCH_PASSWORD: OpenSearch password
+#
+# kubectl create secret generic -n axonops timeseries-credentials \
+# --from-literal=AXONOPS_SEARCH_USER=axonops \
+# --from-literal=AXONOPS_SEARCH_PASSWORD=secure-password
+
 # Configure the Elasticsearch endpoint
 searchDb:
   hosts:
@@ -27,6 +37,8 @@ searchDb:
   username: "admin"
   password: "MyS3cur3P@ss2025"
   skip_verify: true
+  search_secret: ""
+
 
 # dashboardUrl should be set to the publicly-accessible URL for the AxonOps Dashboard
 dashboardUrl: https://axonops.example.com
