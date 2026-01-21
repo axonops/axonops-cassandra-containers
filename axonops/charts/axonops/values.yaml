@@ -287,14 +287,24 @@ axon-server:
     apiPort: 8080
     agentsPort: 1888
 
-  # Database connections
-  # These must match the credentials set in axondb-search and axondb-timeseries
+  # Authentication Configuration
+  # You can provide OpenSearch credentials via a Kubernetes secret.
+  # The secret must contain the following keys:
+  #   - AXONOPS_SEARCH_USER: OpenSearch username
+  #   - AXONOPS_SEARCH_PASSWORD: OpenSearch password
+  #
+  # kubectl create secret generic -n axonops timeseries-credentials \
+  # --from-literal=AXONOPS_SEARCH_USER=axonops \
+  # --from-literal=AXONOPS_SEARCH_PASSWORD=secure-password
+
+  # Configure the Elasticsearch endpoint
   searchDb:
     hosts:
       - https://axondb-search-cluster-master:9200
     username: "admin"
-    password: "MyS3cur3P@ss2025"  # Must match axondb-search.security.adminPassword
-    skip_verify: true  # Set to false in production with proper certificates
+    password: "MyS3cur3P@ss2025"
+    skip_verify: true
+    search_secret: ""
 
   # Public dashboard URL (update this for your environment)
   dashboardUrl: https://axonops.example.com
@@ -326,6 +336,13 @@ axon-server:
       #   useSSL: true
       #   bindDN: "cn=admin,dc=example,dc=com"
       #   bindPassword: "password"
+
+    # Example secret creation for the timeseries DB credentials:
+    #   kubectl create secret generic axonops-db-credentials \
+    #     --from-literal=AXONOPS_DB_USER=axonops \
+    #     --from-literal=AXONOPS_DB_PASSWORD=secure-password
+
+    db_secret: ""
 
     # Additional configuration for database connections
     extraConfig:
