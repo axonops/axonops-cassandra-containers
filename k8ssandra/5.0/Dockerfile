@@ -88,7 +88,9 @@ RUN groupadd --gid 9988 axonops && \
     chmod 755 /usr/share/axonops/axon-agent && \
     rm -f /etc/axonops/axon-agent.yml && \
     touch /var/run/utmp && \
-    microdnf clean all
+    microdnf clean all && \
+    setcap cap_chown+eip /usr/share/axonops/axon-agent && \
+    rm -rf /var/cache/yum /var/cache/dnf
 
 # Install cqlai (pinned version - must be provided as build arg)
 ARG CQLAI_VERSION
